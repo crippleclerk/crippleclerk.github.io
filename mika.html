@@ -95,14 +95,14 @@
         videoElem.src = "";
         videoElem = null;
       }
-      // Clear output if desired
+      // Optional: clear the ASCII output
       // asciiOutput.textContent = "";
     }
 
     function convertImageToAscii(url, colorMode) {
       const img = new Image();
       img.onload = () => {
-        const width = 120; // or choose any "ASCII" width
+        const width = 120; // or choose any “ASCII” width you want
         const aspect = img.height / img.width;
         const height = Math.floor(width * aspect);
 
@@ -115,7 +115,8 @@
         asciiOutput.innerHTML = asciiStr;
       };
       img.onerror = (e) => {
-        alert("Could not load image file. " + e);
+        console.error("Image load error event:", e);
+        alert("Could not load image file. Check console for details.");
       };
       img.src = url; // local object URL
     }
@@ -125,10 +126,10 @@
       videoElem.autoplay = true;
       videoElem.muted = true; // so it can autoplay without user gesture
       videoElem.playsInline = true;
-
       videoElem.src = url;
 
       videoElem.onloadedmetadata = () => {
+        // Set canvas to video’s aspect ratio
         const width = 120;
         const aspect = videoElem.videoHeight / videoElem.videoWidth;
         const height = Math.floor(width * aspect);
@@ -136,11 +137,11 @@
         hiddenCanvas.width = width;
         hiddenCanvas.height = height;
 
-        // We'll do 25 fps => interval ~ 40ms
         asciiRunning = true;
+
+        // Capture frames ~25 FPS => interval of 40ms
         asciiTimer = setInterval(() => {
           if (!asciiRunning || videoElem.paused || videoElem.ended) return;
-
           ctx.drawImage(videoElem, 0, 0, width, height);
           const frame = ctx.getImageData(0, 0, width, height);
           const asciiStr = imageDataToAscii(frame, colorMode);
@@ -148,18 +149,18 @@
         }, 40);
       };
 
-      videoElem.onerror = (err) => {
-	console.log("Video onerror event:", err);
-        alert("Error loading video: " + err.message);
+      // Better error reporting
+      videoElem.onerror = () => {
+        const mediaError = videoElem.error;
+        if (mediaError) {
+          console.error("MediaError code=", mediaError.code);
+          // Not all browsers have .message, so code is safest
+          alert("Error loading video (code=" + mediaError.code + ")");
+        } else {
+          console.error("Unknown video load error");
+          alert("Error loading video (unknown). Check console.");
+        }
       };
-	videoElem.addEventListener('error', (event) => {
-	  console.error("Video error event -> ", event);
-	  const error = videoElem.error; 
-	  if (error) {
-	    console.error("Detailed error code: ", error.code);
-	  }
-	});
-
     }
 
     // Convert raw image data => ASCII text
