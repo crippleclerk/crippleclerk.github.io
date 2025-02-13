@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Local ASCII Converter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #asciiOutput {
+      font-family: monospace;
+      white-space: pre;
+      line-height: 90%;
+      margin-top: 1em;
+    }
+    #hiddenCanvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Local ASCII Converter</h1>
+
+  <!-- File input -->
+  <p>
+    <input type="file" id="fileInput" accept="image/*,video/*" />
+    <label for="colorMode">Color Mode:</label>
+    <select id="colorMode">
+      <option value="bw">Black & White</option>
+      <option value="color">Color</option>
+    </select>
+    <button id="startButton">Start ASCII</button>
+    <button id="stopButton">Stop</button>
+  </p>
+
+  <!-- Where ASCII text goes -->
+  <pre id="asciiOutput"></pre>
+
+  <!-- Hidden <canvas> for drawing frames -->
+  <canvas id="hiddenCanvas"></canvas>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const startBtn = document.getElementById('startButton');
+    const stopBtn = document.getElementById('stopButton');
+    const asciiOutput = document.getElementById('asciiOutput');
+    const colorSelect = document.getElementById('colorMode');
+    const hiddenCanvas = document.getElementById('hiddenCanvas');
+    const ctx = hiddenCanvas.getContext('2d');
+
+    let file = null;
+    let fileURL = null;
+    let videoElem = null;
+    let asciiTimer = null;
+    let asciiRunning = false;
+
+    // Called when "Start ASCII" is clicked
+    startBtn.addEventListener('click', () => {
+      if (!fileInput.files || !fileInput.files[0]) {
+        alert("Please select an image or video file first.");
+        return;
+      }
+      file = fileInput.files[0];
+      const colorMode = colorSelect.value;
+
+      // Revoke old object URL if needed
+      if (fileURL) URL.revokeObjectURL(fileURL);
+      fileURL = URL.createObjectURL(file);
+
+      // Check if image or video by MIME type
+      if (file.type.startsWith("image/")) {
+        stopAscii(); // ensure nothing is running
+        convertImageToAscii(fileURL, colorMode);
+      } else if (file.type.startsWith("video/")) {
+        stopAscii();
+        convertVideoToAscii(fileURL, colorMode);
+      } else {
+        alert("Unsupported file type. Please choose an image or video.");
+      }
+    });
+
+    // Called when "Stop" is clicked
+    stopBtn.addEventListener('click', () => {
+      stopAscii();
+    });
+
+    // Stop any running ASCII loop (for video)
+    function stopAscii() {
+      asciiRunning = false;
+      if (asciiTimer) clearInterval(asciiTimer);
+      asciiTimer = null;
+      if (videoElem) {
+        videoElem.pause();
+        videoElem.src = "";
+        videoElem = null;
+      }
+      // Clear output if desired
+      // asciiOutput.textContent = "";
+    }
+
+    function convertImageToAscii(url, colorMode) {
+      const img = new Image();
+      img.onload = () => {
+        const width = 120; // or choose any "ASCII" width
+        const aspect = img.height / img.width;
+        const height = Math.floor(width * aspect);
+
+        hiddenCanvas.width = width;
+        hiddenCanvas.height = height;
+
+        ctx.drawImage(img, 0, 0, width, height);
+        const frame = ctx.getImageData(0, 0, width, height);
+        const asciiStr = imageDataToAscii(frame, colorMode);
+        asciiOutput.innerHTML = asciiStr;
+      };
+      img.onerror = (e) => {
+        alert("Could not load image file. " + e);
+      };
+      img.src = url; // local object URL
+    }
+
+    function convertVideoToAscii(url, colorMode) {
+      videoElem = document.createElement('video');
+      videoElem.autoplay = true;
+      videoElem.muted = true; // so it can autoplay without user gesture
+      videoElem.playsInline = true;
+
+      videoElem.src = url;
+
+      videoElem.onloadedmetadata = () => {
+        const width = 120;
+        const aspect = videoElem.videoHeight / videoElem.videoWidth;
+        const height = Math.floor(width * aspect);
+
+        hiddenCanvas.width = width;
+        hiddenCanvas.height = height;
+
+        // We'll do 25 fps => interval ~ 40ms
+        asciiRunning = true;
+        asciiTimer = setInterval(() => {
+          if (!asciiRunning || videoElem.paused || videoElem.ended) return;
+
+          ctx.drawImage(videoElem, 0, 0, width, height);
+          const frame = ctx.getImageData(0, 0, width, height);
+          const asciiStr = imageDataToAscii(frame, colorMode);
+          asciiOutput.innerHTML = asciiStr;
+        }, 40);
+      };
+
+      videoElem.onerror = (err) => {
+        alert("Error loading video: " + err.message);
+      };
+    }
+
+    // Convert raw image data => ASCII text
+    function imageDataToAscii(imageData, colorMode) {
+      const { data, width, height } = imageData;
+      let asciiStr = "";
+      for (let y = 0; y < height; y++) {
+        let row = "";
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const r = data[i + 0];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          row += pixelToChar(r, g, b, colorMode);
+        }
+        asciiStr += row + "\n";
+      }
+      return asciiStr;
+    }
+
+    // Map an (r,g,b) pixel => ASCII char
+    function pixelToChar(r, g, b, colorMode) {
+      // Luminance => 0..255
+      const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+      // from darkest to brightest
+      const chars = " .:-=+*#%@";
+      const index = Math.floor((brightness / 255) * (chars.length - 1));
+      const c = chars[index];
+      if (colorMode === "color") {
+        // wrap in a <span style="color:rgb(...)">
+        return `<span style="color:rgb(${r},${g},${b})">${c}</span>`;
+      } else {
+        // black & white
+        return c;
+      }
+    }
+  </script>
+</body>
+</html>
