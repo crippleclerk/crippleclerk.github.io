@@ -55,7 +55,6 @@
     let asciiTimer = null;
     let asciiRunning = false;
 
-    // Called when "Start ASCII" is clicked
     startBtn.addEventListener('click', () => {
       if (!fileInput.files || !fileInput.files[0]) {
         alert("Please select an image or video file first.");
@@ -64,28 +63,26 @@
       file = fileInput.files[0];
       const colorMode = colorSelect.value;
 
-      // Revoke old object URL if needed
+      // If we had a previous blob URL, revoke it
       if (fileURL) URL.revokeObjectURL(fileURL);
       fileURL = URL.createObjectURL(file);
 
-      // Check if image or video by MIME type
+      // Stop any previous ASCII loop
+      stopAscii();
+
       if (file.type.startsWith("image/")) {
-        stopAscii(); // ensure nothing is running
         convertImageToAscii(fileURL, colorMode);
       } else if (file.type.startsWith("video/")) {
-        stopAscii();
         convertVideoToAscii(fileURL, colorMode);
       } else {
         alert("Unsupported file type. Please choose an image or video.");
       }
     });
 
-    // Called when "Stop" is clicked
     stopBtn.addEventListener('click', () => {
       stopAscii();
     });
 
-    // Stop any running ASCII loop (for video)
     function stopAscii() {
       asciiRunning = false;
       if (asciiTimer) clearInterval(asciiTimer);
@@ -95,14 +92,13 @@
         videoElem.src = "";
         videoElem = null;
       }
-      // Optional: clear the ASCII output
-      // asciiOutput.textContent = "";
+      // asciiOutput.textContent = ""; // optional: clear output on stop
     }
 
     function convertImageToAscii(url, colorMode) {
       const img = new Image();
       img.onload = () => {
-        const width = 120; // or choose any “ASCII” width you want
+        const width = 120; // pick a “ASCII” width
         const aspect = img.height / img.width;
         const height = Math.floor(width * aspect);
 
@@ -115,21 +111,18 @@
         asciiOutput.innerHTML = asciiStr;
       };
       img.onerror = (e) => {
-        console.error("Image load error event:", e);
-        alert("Could not load image file. Check console for details.");
+        alert("Could not load image file. " + e);
       };
-      img.src = url; // local object URL
+      img.src = url;
     }
 
     function convertVideoToAscii(url, colorMode) {
       videoElem = document.createElement('video');
-      videoElem.autoplay = true;
-      videoElem.muted = true; // so it can autoplay without user gesture
+      videoElem.muted = true;     // needed for autoplay
       videoElem.playsInline = true;
       videoElem.src = url;
 
       videoElem.onloadedmetadata = () => {
-        // Set canvas to video’s aspect ratio
         const width = 120;
         const aspect = videoElem.videoHeight / videoElem.videoWidth;
         const height = Math.floor(width * aspect);
@@ -137,33 +130,36 @@
         hiddenCanvas.width = width;
         hiddenCanvas.height = height;
 
+        // Start the drawing loop at ~25fps
         asciiRunning = true;
-
-        // Capture frames ~25 FPS => interval of 40ms
         asciiTimer = setInterval(() => {
           if (!asciiRunning || videoElem.paused || videoElem.ended) return;
+
           ctx.drawImage(videoElem, 0, 0, width, height);
           const frame = ctx.getImageData(0, 0, width, height);
           const asciiStr = imageDataToAscii(frame, colorMode);
           asciiOutput.innerHTML = asciiStr;
         }, 40);
+
+        // Attempt to actually play the video
+        videoElem.play().then(() => {
+          console.log("Video playing.");
+        }).catch(err => {
+          console.warn("Video play() failed or was blocked:", err);
+        });
       };
 
-      // Better error reporting
-      videoElem.onerror = () => {
-        const mediaError = videoElem.error;
-        if (mediaError) {
-          console.error("MediaError code=", mediaError.code);
-          // Not all browsers have .message, so code is safest
-          alert("Error loading video (code=" + mediaError.code + ")");
-        } else {
-          console.error("Unknown video load error");
-          alert("Error loading video (unknown). Check console.");
+      // If there's a direct load error
+      videoElem.onerror = (e) => {
+        console.log("Video onerror event:", e);
+        if (videoElem.error) {
+          console.error("Detailed error code:", videoElem.error.code);
+          // error.code can be e.g. 1=MEDIA_ERR_ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
         }
+        alert("Error loading video (possibly unsupported codec or autoplay blocked).");
       };
     }
 
-    // Convert raw image data => ASCII text
     function imageDataToAscii(imageData, colorMode) {
       const { data, width, height } = imageData;
       let asciiStr = "";
@@ -181,19 +177,14 @@
       return asciiStr;
     }
 
-    // Map an (r,g,b) pixel => ASCII char
     function pixelToChar(r, g, b, colorMode) {
-      // Luminance => 0..255
-      const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-      // from darkest to brightest
+      const brightness = 0.299*r + 0.587*g + 0.114*b;
       const chars = " .:-=+*#%@";
       const index = Math.floor((brightness / 255) * (chars.length - 1));
       const c = chars[index];
       if (colorMode === "color") {
-        // wrap in a <span style="color:rgb(...)">
         return `<span style="color:rgb(${r},${g},${b})">${c}</span>`;
       } else {
-        // black & white
         return c;
       }
     }
