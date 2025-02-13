@@ -149,8 +149,17 @@
       };
 
       videoElem.onerror = (err) => {
+	console.log("Video onerror event:", err);
         alert("Error loading video: " + err.message);
       };
+	videoElem.addEventListener('error', (event) => {
+	  console.error("Video error event -> ", event);
+	  const error = videoElem.error; 
+	  if (error) {
+	    console.error("Detailed error code: ", error.code);
+	  }
+	});
+
     }
 
     // Convert raw image data => ASCII text
