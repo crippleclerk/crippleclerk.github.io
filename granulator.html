@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standalone Granulator</title>
+  <style>
+    :root {
+      --bg-color: #1a1a1a;
+      --panel-bg: #2a2a2a;
+      --border-color: #444;
+      --text-color: #e0e0e0;
+      --accent-color: #21ff8c;
+      --accent-darker: #21aa5c;
+      --slider-bg: #444;
+      --slider-filled: #21aa5c;
+      --highlight-color: #ffcc00;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 20px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: var(--accent-color);
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .module-box {
+      background-color: var(--panel-bg);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .control-row {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    select, input[type="file"] {
+      background-color: #333;
+      color: var(--text-color);
+      padding: 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    .full-width-slider {
+      width: 100%;
+      margin: 5px 0;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      background: var(--slider-bg);
+      border-radius: 3px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent-color);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--accent-color);
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+    }
+
+    /* Toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 28px;
+      margin-right: 10px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      border: 1px solid #555;
+      transition: .4s;
+      border-radius: 34px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 3px;
+      background-color: #777;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #3a7a3a;
+    }
+
+    input:checked + .slider:before {
+      background-color: var(--accent-color);
+      transform: translateX(32px);
+    }
+
+    .toggle-label {
+      position: relative;
+      margin-left: 10px;
+    }
+
+    /* Tabs */
+    .granulator-tabs {
+      margin-top: 15px;
+    }
+
+    .granulator-tab-header {
+      display: flex;
+      background: #222;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .granulator-tab-btn {
+      flex: 1;
+      padding: 8px 0;
+      text-align: center;
+      background: #333;
+      cursor: pointer;
+      border-right: 1px solid var(--border-color);
+      transition: background-color 0.2s;
+    }
+
+    .granulator-tab-btn:last-child {
+      border-right: none;
+    }
+
+    .granulator-tab-btn.granulator-active {
+      background: #444;
+      color: var(--accent-color);
+      font-weight: bold;
+    }
+
+    .granulator-tab-content {
+      display: none;
+      padding: 15px;
+      background: #333;
+      border: 1px solid var(--border-color);
+      border-top: none;
+      border-radius: 0 0 4px 4px;
+    }
+
+    .granulator-tab-content.granulator-active {
+      display: block;
+    }
+
+    /* Waveform visualization */
+    .waveform-container {
+      position: relative;
+      margin: 15px 0;
+      height: 80px;
+    }
+
+    #granulator-waveform {
+      width: 100%;
+      height: 80px;
+      background: #222;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+    }
+
+    #granulator-position-indicator {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2px;
+      height: 80px;
+      background: var(--accent-color);
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    #granulator-position-min-marker,
+    #granulator-position-max-marker {
+      position: absolute;
+      top: 0;
+      width: 2px;
+      height: 80px;
+      background: var(--highlight-color);
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    #granulator-selection-region {
+      position: absolute;
+      top: 0;
+      height: 80px;
+      background: rgba(255, 204, 0, 0.2);
+      pointer-events: none;
+    }
+
+    #log-container {
+      background: #111;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 20px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    /* Value display */
+    .param-value {
+      display: inline-block;
+      width: 40px;
+      text-align: right;
+      margin-left: 5px;
+      color: var(--accent-color);
+    }
+
+    /* Support/footer */
+    .support {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 0.9em;
+      color: #888;
+    }
+
+    .support a {
+      color: var(--accent-color);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Granular Synthesizer</h1>
+    
+    <div class="module-box">
+      <!-- File Upload -->
+      <div class="control-row">
+        <label for="audio-file-input">Load Audio File:</label>
+        <input type="file" id="audio-file-input" accept="audio/*" />
+      </div>
+      
+      <!-- Waveform visualization -->
+      <div class="waveform-container">
+        <canvas id="granulator-waveform" width="700" height="80"></canvas>
+        <div id="granulator-position-indicator"></div>
+        <div id="granulator-position-min-marker"></div>
+        <div id="granulator-position-max-marker"></div>
+        <div id="granulator-selection-region"></div>
+      </div>
+      
+      <!-- Volume slider -->
+      <div class="control-row">
+        <label>Volume:
+          <input type="range" id="granulator-volume" min="0" max="1" step="0.01" value="0.7">
+          <span id="granulator-volume-display" class="param-value">0.7</span>
+        </label>
+      </div>
+      
+      <!-- Main playback controls -->
+      <div class="control-row">
+        <label class="switch">
+          <input type="checkbox" id="granulator-toggle">
+          <span class="slider"></span>
+        </label>
+        <span class="toggle-label">Off</span>
+      </div>
+      
+      <!-- Tabs for different control groups -->
+      <div class="granulator-tabs">
+        <div class="granulator-tab-header">
+          <div class="granulator-tab-btn granulator-active" data-tab="grain">Grain</div>
+          <div class="granulator-tab-btn" data-tab="position">Position</div>
+          <div class="granulator-tab-btn" data-tab="pitch">Pitch</div>
+          <div class="granulator-tab-btn" data-tab="voices">Voices</div>
+        </div>
+        
+        <!-- Basic grain controls tab -->
+        <div class="granulator-tab-content granulator-active" id="granulator-grain-tab">
+          <label>Grain Size (s):
+            <input type="range" id="granulator-grain-size" min="0.01" max="2" step="0.01" value="0.1" class="full-width-slider">
+            <span id="granulator-grain-size-display" class="param-value">0.1</span>
+          </label>
+          
+          <label>Overlap:
+            <input type="range" id="granulator-grain-overlap" min="1" max="10" step="0.1" value="2" class="full-width-slider">
+            <span id="granulator-grain-overlap-display" class="param-value">2</span>
+          </label>
+          
+          <label>Time Stretch:
+            <input type="range" id="granulator-time-stretch" min="0.25" max="4" step="0.01" value="1.0" class="full-width-slider">
+            <span id="granulator-time-stretch-display" class="param-value">1.0</span>
+          </label>
+          
+          <div>
+            <label>Envelope Shape:</label>
+            <select id="granulator-envelope-shape">
+              <option value="cos">Cosine</option>
+              <option value="lin">Linear</option>
+              <option value="exp">Exponential</option>
+            </select>
+          </div>
+          
+          <div style="display:flex; gap:10px; margin-top:10px;">
+            <div style="flex:1;">
+              <label>Attack (s):
+                <input type="range" id="granulator-attack" min="0.001" max="1" step="0.001" value="0.1" style="width:100%;">
+                <span id="granulator-attack-display" class="param-value">0.1</span>
+              </label>
+            </div>
+            <div style="flex:1;">
+              <label>Release (s):
+                <input type="range" id="granulator-release" min="0.001" max="1" step="0.001" value="0.1" style="width:100%;">
+                <span id="granulator-release-display" class="param-value">0.1</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Position controls tab -->
+        <div class="granulator-tab-content" id="granulator-position-tab">
+          <label>Position Min:
+            <input type="range" id="granulator-position-min" min="0" max="1" step="0.01" value="0" class="full-width-slider">
+            <span id="granulator-position-min-display" class="param-value">0</span>
+          </label>
+          
+          <label>Position Max:
+            <input type="range" id="granulator-position-max" min="0" max="1" step="0.01" value="1" class="full-width-slider">
+            <span id="granulator-position-max-display" class="param-value">1</span>
+          </label>
+          
+          <label>Randomness:
+            <input type="range" id="granulator-position-random" min="0" max="1" step="0.01" value="0.1" class="full-width-slider">
+            <span id="granulator-position-random-display" class="param-value">0.1</span>
+          </label>
+          
+          <label>Speed:
+            <input type="range" id="granulator-position-speed" min="-50" max="50" step="0.1" value="0" class="full-width-slider">
+            <span id="granulator-position-speed-display" class="param-value">0</span>
+          </label>
+        </div>
+        
+        <!-- Pitch controls tab -->
+        <div class="granulator-tab-content" id="granulator-pitch-tab">
+          <label>Pitch Shift (semitones):
+            <input type="range" id="granulator-pitch-shift" min="-24" max="24" step="1" value="0" class="full-width-slider">
+            <span id="granulator-pitch-shift-display" class="param-value">0</span>
+          </label>
+          
+          <label>Pitch Random (semitones):
+            <input type="range" id="granulator-pitch-random" min="0" max="12" step="0.1" value="0" class="full-width-slider">
+            <span id="granulator-pitch-random-display" class="param-value">0</span>
+          </label>
+        </div>
+        
+        <!-- Voices controls tab -->
+        <div class="granulator-tab-content" id="granulator-voices-tab">
+          <label>Voice Count:
+            <input type="range" id="granulator-voices" min="1" max="8" step="1" value="1" class="full-width-slider">
+            <span id="granulator-voices-display" class="param-value">1</span>
+          </label>
+          
+          <label>Stereo Spread:
+            <input type="range" id="granulator-spread" min="0" max="1" step="0.01" value="0" class="full-width-slider">
+            <span id="granulator-spread-display" class="param-value">0</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Log messages -->
+    <div id="log-container"></div>
+    
+    <div class="support">
+      <p>Created with Web Audio API &bull; <a href="https://github.com/yourusername/granulator" target="_blank">GitHub</a></p>
+    </div>
+  </div>
+
+  <script>
+    // =============== GRANULATOR ENGINE ===============
+
+    // AudioContext initialization
+    let audioContext = null;
+    let audioContextReady = false;
+
+    function initializeAudioContext() {
+      if (audioContext) {
+        logToScreen("AudioContext already initialized.");
+        return;
+      }
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) {
+        logToScreen("Web Audio API not supported in this browser.");
+        return;
+      }
+
+      try {
+        audioContext = new AudioCtx();
+        
+        audioContext.resume().then(() => {
+          if (audioContext.state === 'running') {
+            audioContextReady = true;
+            logToScreen("AudioContext initialized and running.");
+          } else {
+            logToScreen(`AudioContext state: ${audioContext.state}`);
+          }
+        }).catch(err => {
+          logToScreen(`Error resuming AudioContext: ${err}`);
+        });
+      } catch (err) {
+        logToScreen(`Error initializing AudioContext: ${err}`);
+      }
+    }
+
+    // Main state object to track all parameters
+    const granulatorState = {
+      // Sample handling
+      sampleBuffer: null,
+      sampleDuration: 0,
+      sampleRate: 0,
+      isPlaying: false,
+      
+      // Grain parameters
+      grainSize: 0.1,        // in seconds (100ms default)
+      grainOverlap: 2,       // how many grains overlap (density)
+      positionMin: 0,        // start point in the sample (0-1)
+      positionMax: 1,        // end point in the sample (0-1)
+      positionRandom: 0.1,   // position randomization (0-1)
+      positionSpeed: 0,      // playhead movement speed (can be negative)
+      
+      // Pitch and timing
+      pitchShift: 0,         // in semitones (-24 to 24)
+      pitchRandom: 0,        // random pitch variation in semitones
+      timeStretch: 1.0,      // time stretching factor (0.25-4)
+      
+      // Envelope
+      attack: 0.1,           // grain attack time (seconds)
+      release: 0.1,          // grain release time (seconds)
+      shape: 'cos',          // envelope shape: 'cos', 'lin', 'exp'
+      
+      // Volume & voices
+      masterVolume: 0.7,     // overall volume (0-1)
+      voices: 1,             // number of simultaneous voices (1-8)
+      spread: 0,             // stereo spread (0-1)
+      
+      // Current playback state
+      playheadPosition: 0,   // current position in the sample (0-1)
+      activeGrains: [],      // array of currently active grains
+      grainCounter: 0,       // counter for scheduling grains
+      schedulerTimerId: null // scheduler interval ID
+    };
+
+    // Grain class to manage individual grains
+    class Grain {
+      constructor(options) {
+        this.id = options.id;
+        this.startTime = options.startTime;
+        this.endTime = options.endTime;
+        this.position = options.position;
+        this.duration = options.duration;
+        this.pitch = options.pitch;
+        this.pan = options.pan;
+        this.voice = options.voice;
+        this.nodes = {};
+        this.isActive = true;
+      }
+      
+      // Creates the audio processing chain for this grain
+      createAudioNodes() {
+        const { attack, release, shape, masterVolume } = granulatorState;
+        const now = audioContext.currentTime;
+        
+        // Source node (buffer player)
+        const source = audioContext.createBufferSource();
+        source.buffer = granulatorState.sampleBuffer;
+        
+        // Apply pitch shift
+        if (this.pitch !== 0) {
+          source.detune.value = this.pitch * 100; // convert semitones to cents
+        }
+        
+        // Calculate the start position in the buffer
+        const sampleOffset = this.position * granulatorState.sampleBuffer.duration;
+        
+        // Envelope (gain node)
+        const envelope = audioContext.createGain();
+        envelope.gain.value = 0;
+        
+        // Master volume node (separate from envelope)
+        const volumeNode = audioContext.createGain();
+        volumeNode.gain.value = masterVolume;
+        
+        // Apply envelope shape based on the selected shape
+        const attackEnd = now + attack;
+        const releaseStart = now + this.duration - release;
+        
+        // Set initial gain to 0
+        envelope.gain.setValueAtTime(0, now);
+        
+        // Apply attack phase based on envelope shape
+        if (shape === 'cos') {
+          try {
+            // Cosine (smoother) attack
+            envelope.gain.setValueCurveAtTime(
+              new Float32Array([0, 0.2, 0.5, 0.8, 1]), 
+              now, 
+              attack
+            );
+          } catch (e) {
+            // Fallback to linear ramp if curve fails
+            console.log("Using fallback envelope due to curve overlap");
+            envelope.gain.linearRampToValueAtTime(1, attackEnd);
+          }
+        } else if (shape === 'exp') {
+          // Exponential attack
+          envelope.gain.exponentialRampToValueAtTime(0.01, now); // Start from small non-zero value
+          envelope.gain.exponentialRampToValueAtTime(1, attackEnd);
+        } else {
+          // Linear attack (default)
+          envelope.gain.linearRampToValueAtTime(1, attackEnd);
+        }
+        
+        // Sustain phase - hold at full volume
+        envelope.gain.setValueAtTime(1, attackEnd);
+        
+        // Apply release phase based on envelope shape
+        if (shape === 'cos') {
+          try {
+            // Cosine release
+            envelope.gain.setValueCurveAtTime(
+              new Float32Array([1, 0.8, 0.5, 0.2, 0]), 
+              releaseStart, 
+              release
+            );
+          } catch (e) {
+            // Fallback to linear ramp if curve fails
+            console.log("Using fallback envelope due to curve overlap");
+            envelope.gain.linearRampToValueAtTime(0, now + this.duration);
+          }
+        } else if (shape === 'exp') {
+          // Exponential release
+          envelope.gain.exponentialRampToValueAtTime(0.01, now + this.duration); // End at small value
+        } else {
+          // Linear release (default)
+          envelope.gain.linearRampToValueAtTime(0, now + this.duration);
+        }
+        
+        // Create panner if spread > 0
+        let panner = null;
+        if (granulatorState.spread > 0 && this.pan !== 0) {
+          panner = audioContext.createStereoPanner();
+          panner.pan.value = this.pan;
+        }
+        
+        // Connect the audio chain with volume control
+        source.connect(envelope);
+        envelope.connect(volumeNode);
+        
+        if (panner) {
+          volumeNode.connect(panner);
+          panner.connect(audioContext.destination);
+        } else {
+          volumeNode.connect(audioContext.destination);
+        }
+        
+        // Schedule playback
+        source.start(now, sampleOffset, this.duration * 1.5); // Allow a bit more time for the envelope
+        source.stop(now + this.duration + 0.05); // Small buffer after envelope completes
+        
+        // Store nodes for later cleanup
+        this.nodes = {
+          source,
+          envelope,
+          volumeNode,
+          panner
+        };
+        
+        // Clean up after playback ends
+        source.onended = () => {
+          this.isActive = false;
+          this.disconnect();
+          
+          // Remove from active grains array
+          const index = granulatorState.activeGrains.findIndex(g => g.id === this.id);
+          if (index !== -1) {
+            granulatorState.activeGrains.splice(index, 1);
+          }
+        };
+      }
+      
+      // Clean up audio nodes
+      disconnect() {
+        if (this.nodes.source) {
+          this.nodes.source.disconnect();
+        }
+        if (this.nodes.envelope) {
+          this.nodes.envelope.disconnect();
+        }
+        if (this.nodes.volumeNode) {
+          this.nodes.volumeNode.disconnect();
+        }
+        if (this.nodes.panner) {
+          this.nodes.panner.disconnect();
+        }
+        this.nodes = {};
+      }
+    }
+
+    /**
+     * Load a sample into the granulator from a local file
+     */
+    async function loadGranulatorSample(fileObj) {
+      if (!audioContextReady) {
+        logToScreen("AudioContext not ready. Cannot load granulator sample.");
+        return;
+      }
+      
+      try {
+        // Remember if we were playing
+        const wasPlaying = granulatorState.isPlaying;
+        
+        // Reset buffer and related state
+        granulatorState.sampleBuffer = null;
+        granulatorState.sampleDuration = 0;
+        granulatorState.playheadPosition = 0;
+        
+        logToScreen(`Loading file: ${fileObj.name}`);
+        
+        // Use FileReader to read the file
+        const reader = new FileReader();
+        
+        // Create a promise to handle the file reading
+        const readerPromise = new Promise((resolve, reject) => {
+          reader.onload = (event) => resolve(event.target.result);
+          reader.onerror = (error) => reject(error);
+        });
+        
+        // Start reading the file
+        reader.readAsArrayBuffer(fileObj);
+        
+        // Wait for the file to be read
+        const arrayBuffer = await readerPromise;
+        
+        // Decode the audio data
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Store the buffer in state
+        granulatorState.sampleBuffer = audioBuffer;
+        granulatorState.sampleDuration = audioBuffer.duration;
+        granulatorState.sampleRate = audioBuffer.sampleRate;
+        
+        // Handle seamless continuation
+        if (wasPlaying) {
+          // Stop scheduler but keep isPlaying flag
+          if (granulatorState.schedulerTimerId) {
+            clearInterval(granulatorState.schedulerTimerId);
+            granulatorState.schedulerTimerId = null;
+          }
+          
+          // Fade out and clean up existing grains
+          const now = audioContext.currentTime;
+          granulatorState.activeGrains.forEach(grain => {
+            if (grain.nodes.envelope) {
+              try {
+                grain.nodes.envelope.gain.cancelScheduledValues(now);
+                grain.nodes.envelope.gain.setValueAtTime(grain.nodes.envelope.gain.value || 0, now);
+                grain.nodes.envelope.gain.linearRampToValueAtTime(0, now + 0.05);
+              } catch (e) {
+                // Ignore errors during cleanup
+              }
+            }
+          });
+          
+          // Brief wait to let fade complete
+          setTimeout(() => {
+            // Clear active grains
+            granulatorState.activeGrains = [];
+            
+            // Start with new sample
+            const schedulingInterval = (granulatorState.grainSize / granulatorState.grainOverlap) * 1000;
+            scheduleNextGrain();
+            granulatorState.schedulerTimerId = setInterval(scheduleNextGrain, schedulingInterval);
+          }, 100);
+        }
+        
+        logToScreen(`Sample loaded: ${fileObj.name} (${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.sampleRate}Hz)`);
+        
+        // Trigger an event for the waveform visualization
+        const event = new CustomEvent('granulator:sampleLoaded', { 
+          detail: { buffer: audioBuffer, filename: fileObj.name }
+        });
+        document.dispatchEvent(event);
+        
+        return audioBuffer;
+      } catch (err) {
+        logToScreen(`Error loading sample: ${err.message}`);
+        throw err;
+      }
+    }
+
+      /**
+     * Calculate grain scheduling interval based on parameters
+     * with safety limits to prevent audio glitches
+     */
+    function calculateSchedulingInterval() {
+      let interval = (granulatorState.grainSize / granulatorState.grainOverlap) * 1000;
+      
+      // Ensure the interval isn't too small (minimum 10ms)
+      interval = Math.max(interval, 10);
+      
+      return interval;
+    }
+
+    /**
+     * Start the granulator playback
+     */
+    function startGranulator() {
+      if (!audioContextReady) {
+        logToScreen("AudioContext not ready. Cannot start granulator.");
+        return;
+      }
+      
+      if (!granulatorState.sampleBuffer) {
+        logToScreen("No sample loaded. Cannot start granulator.");
+        return;
+      }
+      
+      if (granulatorState.isPlaying) {
+        logToScreen("Granulator is already playing.");
+        return;
+      }
+      
+      granulatorState.isPlaying = true;
+      granulatorState.playheadPosition = granulatorState.positionMin;
+      
+      // Calculate grain scheduling interval with safety limits
+      const schedulingInterval = calculateSchedulingInterval();
+      
+      // Start the grain scheduler
+      scheduleNextGrain();
+      granulatorState.schedulerTimerId = setInterval(scheduleNextGrain, schedulingInterval);
+      
+      logToScreen("Granulator started.");
+    }
+
+    /**
+     * Stop the granulator playback
+     */
+    function stopGranulator() {
+      if (!granulatorState.isPlaying) {
+        return;
+      }
+      
+      // Stop the scheduler
+      if (granulatorState.schedulerTimerId) {
+        clearInterval(granulatorState.schedulerTimerId);
+        granulatorState.schedulerTimerId = null;
+      }
+      
+      granulatorState.isPlaying = false;
+      
+      // Fade out all active grains
+      const now = audioContext.currentTime;
+      granulatorState.activeGrains.forEach(grain => {
+        if (grain.nodes.envelope) {
+          grain.nodes.envelope.gain.cancelScheduledValues(now);
+          grain.nodes.envelope.gain.setValueAtTime(grain.nodes.envelope.gain.value, now);
+          grain.nodes.envelope.gain.linearRampToValueAtTime(0, now + 0.1);
+          
+          // Schedule to stop after fade out
+          if (grain.nodes.source) {
+            grain.nodes.source.stop(now + 0.15);
+          }
+        }
+      });
+      
+      // Reset active grains after fade out
+      setTimeout(() => {
+        granulatorState.activeGrains = [];
+      }, 200);
+      
+      logToScreen("Granulator stopped.");
+    }
+
+    /**
+     * Toggle granulator on/off
+     */
+    function toggleGranulator(enable) {
+      // Handle undefined/null case (toggle based on current state)
+      if (enable === undefined || enable === null) {
+        enable = !granulatorState.isPlaying;
+      }
+      
+      if (enable && !granulatorState.isPlaying) {
+        startGranulator();
+        return true;
+      } else if (!enable && granulatorState.isPlaying) {
+        stopGranulator();
+        return false;
+      }
+      
+      return granulatorState.isPlaying;
+    }
+
+    /**
+     * Schedule the next grain to play
+     */
+    function scheduleNextGrain() {
+      if (!granulatorState.isPlaying || !granulatorState.sampleBuffer) {
+        return;
+      }
+      
+      const now = audioContext.currentTime;
+      
+      // Calculate base values for this grain
+      let basePosition = granulatorState.playheadPosition;
+      
+      // Apply position randomization if enabled
+      if (granulatorState.positionRandom > 0) {
+        const randomOffset = (Math.random() * 2 - 1) * granulatorState.positionRandom;
+        basePosition += randomOffset;
+        
+        // Clamp position to valid range
+        basePosition = Math.max(granulatorState.positionMin, Math.min(granulatorState.positionMax, basePosition));
+      }
+      
+      // Schedule grains for each voice
+      for (let v = 0; v < granulatorState.voices; v++) {
+        // Calculate voice-specific position with slight variations
+        let position = basePosition;
+        if (granulatorState.voices > 1) {
+          // Add slight position variation for each voice
+          position += (v / granulatorState.voices) * 0.01 * granulatorState.positionRandom;
+        }
+        
+        // Calculate voice-specific pitch
+        let pitch = granulatorState.pitchShift;
+        if (granulatorState.pitchRandom > 0) {
+          // Add random pitch variation
+          pitch += (Math.random() * 2 - 1) * granulatorState.pitchRandom;
+        }
+        
+        // Calculate stereo panning based on spread and voice
+        let pan = 0;
+        if (granulatorState.spread > 0 && granulatorState.voices > 1) {
+          // Distribute voices across stereo field
+          pan = ((v / (granulatorState.voices - 1)) * 2 - 1) * granulatorState.spread;
+        }
+        
+        // Create the grain
+        const grain = new Grain({
+          id: granulatorState.grainCounter++,
+          startTime: now,
+          endTime: now + granulatorState.grainSize,
+          position: position,
+          duration: granulatorState.grainSize * granulatorState.timeStretch,
+          pitch: pitch,
+          pan: pan,
+          voice: v
+        });
+        
+        // Initialize audio processing for the grain
+        grain.createAudioNodes();
+        
+        // Add to active grains
+        granulatorState.activeGrains.push(grain);
+      }
+      
+      // Update playhead position for next grain
+      updatePlayheadPosition();
+    }
+
+    /**
+     * Update the playhead position based on the current settings
+     */
+    function updatePlayheadPosition() {
+      if (granulatorState.positionSpeed !== 0) {
+        // Move playhead based on speed
+        granulatorState.playheadPosition += (granulatorState.positionSpeed / 100);
+        
+        // Handle wrapping or bouncing at boundaries
+        if (granulatorState.playheadPosition > granulatorState.positionMax) {
+          if (granulatorState.positionSpeed > 0) {
+            // Wrap around to start
+            granulatorState.playheadPosition = granulatorState.positionMin;
+          } else {
+            // Bounce
+            granulatorState.playheadPosition = granulatorState.positionMax;
+            granulatorState.positionSpeed = -granulatorState.positionSpeed;
+          }
+        } else if (granulatorState.playheadPosition < granulatorState.positionMin) {
+          if (granulatorState.positionSpeed < 0) {
+            // Wrap around to end
+            granulatorState.playheadPosition = granulatorState.positionMax;
+          } else {
+            // Bounce
+            granulatorState.playheadPosition = granulatorState.positionMin;
+            granulatorState.positionSpeed = -granulatorState.positionSpeed;
+          }
+        }
+      }
+    }
+
+    /**
+     * Set granulator parameters
+     */
+    function setGranulatorParams(params) {
+      let hasChanges = false;
+      
+      // Update all provided parameters
+      Object.entries(params).forEach(([key, value]) => {
+        if (granulatorState[key] !== undefined && granulatorState[key] !== value) {
+          // Validate and apply parameter
+          switch (key) {
+            case 'grainSize':
+              value = clamp(value, 0.01, 2.0);
+              break;
+            case 'grainOverlap':
+              value = clamp(value, 1, 10);
+              break;
+            case 'positionMin':
+              value = clamp(value, 0, granulatorState.positionMax);
+              break;
+            case 'positionMax':
+              value = clamp(value, granulatorState.positionMin, 1);
+              break;
+            case 'positionRandom':
+              value = clamp(value, 0, 1);
+              break;
+            case 'positionSpeed':
+              value = clamp(value, -100, 100);
+              break;
+            case 'pitchShift':
+              value = clamp(value, -24, 24);
+              break;
+            case 'pitchRandom':
+              value = clamp(value, 0, 12);
+              break;
+            case 'timeStretch':
+              value = clamp(value, 0.25, 4);
+              break;
+            case 'attack':
+              value = clamp(value, 0.001, 1);
+              break;
+            case 'release':
+              value = clamp(value, 0.001, 1);
+              break;
+            case 'shape':
+              if (!['cos', 'lin', 'exp'].includes(value)) {
+                value = 'cos';
+              }
+              break;
+            case 'voices':
+              value = clamp(Math.round(value), 1, 8);
+              break;
+            case 'spread':
+              value = clamp(value, 0, 1);
+              break;
+            case 'masterVolume':
+              value = clamp(value, 0, 1);
+              break;
+          }
+          
+          // Update the parameter
+          granulatorState[key] = value;
+          hasChanges = true;
+        }
+      });
+      
+      // If there's a scheduler running and parameters changed, we may need to update the scheduling interval
+      if (hasChanges && granulatorState.isPlaying && granulatorState.schedulerTimerId) {
+        // Restart with new settings if grain size or overlap changed
+        if (params.grainSize !== undefined || params.grainOverlap !== undefined) {
+          clearInterval(granulatorState.schedulerTimerId);
+          const schedulingInterval = (granulatorState.grainSize / granulatorState.grainOverlap) * 1000;
+          granulatorState.schedulerTimerId = setInterval(scheduleNextGrain, schedulingInterval);
+        }
+      }
+      
+      if (hasChanges) {
+        logToScreen(`Parameters updated: ${Object.keys(params).join(', ')}`);
+      }
+    }
+
+    /**
+     * Utility function to clamp a value between min and max
+     */
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    /**
+     * Log messages to the screen
+     */
+    function logToScreen(message) {
+      const logContainer = document.getElementById('log-container');
+      if (!logContainer) return;
+      
+      const timestamp = new Date().toLocaleTimeString();
+      logContainer.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+      logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // =============== WAVEFORM VISUALIZATION ===============
+
+    /**
+     * Waveform visualization for the granulator
+     */
+    class GranulatorWaveform {
+      constructor() {
+        this.canvas = document.getElementById('granulator-waveform');
+        this.ctx = this.canvas.getContext('2d');
+        this.width = this.canvas.width;
+        this.height = this.canvas.height;
+        this.sampleBuffer = null;
+        this.waveformData = null;
+        this.positionIndicator = document.getElementById('granulator-position-indicator');
+        this.positionMinMarker = document.getElementById('granulator-position-min-marker');
+        this.positionMaxMarker = document.getElementById('granulator-position-max-marker');
+        this.selectionRegion = document.getElementById('granulator-selection-region');
+        
+        this.isDragging = false;
+        this.dragStartX = 0;
+        this.dragEndX = 0;
+        this.selectionStart = 0;
+        this.selectionEnd = 1;
+        
+        this.animationFrameId = null;
+        
+        // Make the canvas responsive
+        this.resizeCanvas();
+        window.addEventListener('resize', this.resizeCanvas.bind(this));
+        
+        this.bindEvents();
+      }
+      
+      /**
+       * Resize canvas to match container width
+       */
+      resizeCanvas() {
+        const container = this.canvas.parentElement;
+        this.canvas.width = container.clientWidth;
+        this.width = this.canvas.width;
+        
+        if (this.waveformData) {
+          this.drawWaveform();
+          this.updateSelection();
+        }
+      }
+      
+      /**
+       * Set up event listeners for user interaction
+       */
+      bindEvents() {
+        // Mouse events for selection
+        this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
+        document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+        document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+        
+        // Touch events for mobile
+        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this));
+        document.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        document.addEventListener('touchend', this.handleTouchEnd.bind(this));
+      }
+      
+      /**
+       * Handle mouse down on the canvas to start selection
+       */
+      handleMouseDown(e) {
+        if (!this.sampleBuffer) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        this.isDragging = true;
+        this.dragStartX = e.clientX - rect.left;
+        this.dragEndX = this.dragStartX;
+        
+        // Calculate position in the sample (0-1)
+        this.selectionStart = this.dragStartX / this.width;
+        this.selectionEnd = this.selectionStart;
+        
+        this.updateSelection();
+      }
+      
+      /**
+       * Handle mouse move to update selection
+       */
+      handleMouseMove(e) {
+        if (!this.isDragging) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        this.dragEndX = Math.max(0, Math.min(this.width, e.clientX - rect.left));
+        
+        // Calculate position in the sample (0-1)
+        this.selectionEnd = this.dragEndX / this.width;
+        
+        this.updateSelection();
+      }
+      
+      /**
+       * Handle mouse up to finalize selection
+       */
+      handleMouseUp() {
+        if (!this.isDragging) return;
+        
+        this.isDragging = false;
+        
+        // Normalize selection (ensure start < end)
+        if (this.selectionStart > this.selectionEnd) {
+          [this.selectionStart, this.selectionEnd] = [this.selectionEnd, this.selectionStart];
+        }
+        
+        // Apply selection to granulator
+        if (this.selectionEnd > this.selectionStart) {
+          // Update UI sliders
+          const minSlider = document.getElementById('granulator-position-min');
+          const maxSlider = document.getElementById('granulator-position-max');
+          
+          if (minSlider && maxSlider) {
+            minSlider.value = this.selectionStart;
+            maxSlider.value = this.selectionEnd;
+            
+            // Update displays
+            document.getElementById('granulator-position-min-display').textContent = this.selectionStart.toFixed(2);
+            document.getElementById('granulator-position-max-display').textContent = this.selectionEnd.toFixed(2);
+            
+            // Update granulator parameters
+            setGranulatorParams({
+              positionMin: this.selectionStart,
+              positionMax: this.selectionEnd
+            });
+          }
+        }
+      }
+      
+      /**
+       * Handle touch start (mobile)
+       */
+      handleTouchStart(e) {
+        if (!this.sampleBuffer || e.touches.length === 0) return;
+        
+        const touch = e.touches[0];
+        const rect = this.canvas.getBoundingClientRect();
+        this.isDragging = true;
+        this.dragStartX = touch.clientX - rect.left;
+        this.dragEndX = this.dragStartX;
+        
+        // Calculate position in the sample (0-1)
+        this.selectionStart = this.dragStartX / this.width;
+        this.selectionEnd = this.selectionStart;
+        
+        this.updateSelection();
+        
+        // Prevent scrolling
+        e.preventDefault();
+      }
+      
+      /**
+       * Handle touch move (mobile)
+       */
+      handleTouchMove(e) {
+        if (!this.isDragging || e.touches.length === 0) return;
+        
+        const touch = e.touches[0];
+        const rect = this.canvas.getBoundingClientRect();
+        this.dragEndX = Math.max(0, Math.min(this.width, touch.clientX - rect.left));
+        
+        // Calculate position in the sample (0-1)
+        this.selectionEnd = this.dragEndX / this.width;
+        
+        this.updateSelection();
+        
+        // Prevent scrolling
+        e.preventDefault();
+      }
+      
+      /**
+       * Handle touch end (mobile)
+       */
+      handleTouchEnd() {
+        this.handleMouseUp(); // Reuse mouse up logic
+      }
+      
+      /**
+       * Update the visual selection region
+       */
+      updateSelection() {
+        // Make sure start is always less than end for display
+        let displayStart = Math.min(this.selectionStart, this.selectionEnd);
+        let displayEnd = Math.max(this.selectionStart, this.selectionEnd);
+        
+        // Update the selection region div
+        const left = displayStart * this.width;
+        const right = displayEnd * this.width;
+        
+        this.selectionRegion.style.left = `${left}px`;
+        this.selectionRegion.style.width = `${right - left}px`;
+        
+        // Update min/max markers
+        this.positionMinMarker.style.left = `${left}px`;
+        this.positionMaxMarker.style.left = `${right}px`;
+      }
+      
+      /**
+       * Load a new sample buffer
+       */
+      loadSample(buffer) {
+        this.sampleBuffer = buffer;
+        
+        if (buffer) {
+          // Generate waveform data
+          this.generateWaveformData();
+          
+          // Draw the waveform
+          this.drawWaveform();
+          
+          // Start the position indicator animation
+          this.startPositionAnimation();
+          
+          // Set initial selection to full sample
+          this.selectionStart = 0;
+          this.selectionEnd = 1;
+          this.updateSelection();
+        } else {
+          // Clear the canvas
+          this.ctx.clearRect(0, 0, this.width, this.height);
+          
+          // Stop the animation
+          this.stopPositionAnimation();
+          
+          // Hide the selection
+          this.selectionRegion.style.width = '0';
+          this.positionMinMarker.style.left = '0';
+          this.positionMaxMarker.style.left = '0';
+          this.positionIndicator.style.left = '0';
+        }
+      }
+      
+      /**
+       * Generate waveform data from the sample buffer
+       */
+      generateWaveformData() {
+        if (!this.sampleBuffer) return;
+        
+        const rawData = this.sampleBuffer.getChannelData(0);
+        const samples = this.width;
+        const blockSize = Math.floor(rawData.length / samples);
+        const waveform = new Float32Array(samples);
+        
+        for (let i = 0; i < samples; i++) {
+          const start = i * blockSize;
+          let max = 0;
+          
+          // Find the max value in this block
+          for (let j = 0; j < blockSize && start + j < rawData.length; j++) {
+            const value = Math.abs(rawData[start + j]);
+            if (value > max) max = value;
+          }
+          
+          waveform[i] = max;
+        }
+        
+        this.waveformData = waveform;
+      }
+      
+      /**
+       * Draw the waveform on the canvas
+       */
+      drawWaveform() {
+        if (!this.waveformData) return;
+        
+        // Clear the canvas
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        
+        // Draw the waveform
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, this.height / 2);
+        
+        // Drawing style
+        this.ctx.strokeStyle = '#21aa5c';
+        this.ctx.lineWidth = 1;
+        
+        const middle = this.height / 2;
+        
+        for (let i = 0; i < this.waveformData.length; i++) {
+          const amplitude = this.waveformData[i] * (this.height * 0.8);
+          this.ctx.lineTo(i, middle - amplitude / 2);
+        }
+        
+        for (let i = this.waveformData.length - 1; i >= 0; i--) {
+          const amplitude = this.waveformData[i] * (this.height * 0.8);
+          this.ctx.lineTo(i, middle + amplitude / 2);
+        }
+        
+        this.ctx.closePath();
+        this.ctx.fillStyle = 'rgba(33, 170, 92, 0.2)';
+        this.ctx.fill();
+        this.ctx.stroke();
+      }
+      
+      /**
+       * Start animation for the position indicator
+       */
+      startPositionAnimation() {
+        this.stopPositionAnimation();
+        
+        const animate = () => {
+          // Try to get position from granulator
+          const playhead = granulatorState.playheadPosition;
+          
+          // Try to get position from UI sliders as a fallback
+          const minPos = parseFloat(document.getElementById('granulator-position-min').value) || 0;
+          const maxPos = parseFloat(document.getElementById('granulator-position-max').value) || 1;
+          const posRange = maxPos - minPos;
+          
+          // Use a fixed position if anything is invalid
+          let position = playhead;
+          
+          if (isNaN(position) || position < 0 || position > 1) {
+            // Generate a value based on current time for animation
+            // This simulates the granulator's playhead movement
+            const time = performance.now() / 1000;
+            const speed = parseFloat(document.getElementById('granulator-position-speed').value) || 0;
+            
+            if (speed !== 0) {
+              // If position-speed is set, use it to animate
+              const cycleTime = 5 / Math.abs(speed); // 5 seconds at speed=1
+              const normalizedTime = (time % cycleTime) / cycleTime;
+              
+              if (speed > 0) {
+                // Forward playback (left to right)
+                position = minPos + normalizedTime * posRange;
+              } else {
+                // Reverse playback (right to left)
+                position = maxPos - normalizedTime * posRange;
+              }
+            } else {
+              // If no speed, use pseudo-random movement based on time
+              // Map a sine wave to the position range
+              position = minPos + (Math.sin(time) * 0.5 + 0.5) * posRange;
+            }
+          }
+          
+          // Update the position indicator
+          const positionPx = position * this.width;
+          this.positionIndicator.style.left = `${positionPx}px`;
+          
+          // Continue animation
+          this.animationFrameId = requestAnimationFrame(animate);
+        };
+        
+        animate();
+      }
+      
+      /**
+       * Stop the position indicator animation
+       */
+      stopPositionAnimation() {
+        if (this.animationFrameId) {
+          cancelAnimationFrame(this.animationFrameId);
+          this.animationFrameId = null;
+        }
+      }
+    }
+
+    // =============== UI CONTROLS ===============
+
+    // Initialize tab system for granulator module
+    function initGranulatorTabs() {
+      const tabBtns = document.querySelectorAll('.granulator-tab-btn');
+      
+      tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const tabContainer = btn.closest('.granulator-tabs');
+          if (!tabContainer) return;
+          
+          const tab = btn.getAttribute('data-tab');
+          
+          // Get buttons and contents in this tab container only
+          const containerBtns = tabContainer.querySelectorAll('.granulator-tab-btn');
+          const containerContents = document.querySelectorAll('.granulator-tab-content');
+          
+          // Deactivate all tabs in this container
+          containerBtns.forEach(b => b.classList.remove('granulator-active'));
+          containerContents.forEach(c => c.classList.remove('granulator-active'));
+          
+          // Activate selected tab
+          btn.classList.add('granulator-active');
+          const tabContent = document.getElementById(`granulator-${tab}-tab`);
+          if (tabContent) {
+            tabContent.classList.add('granulator-active');
+          }
+        });
+      });
+    }
+
+    // Update display values for sliders
+    function initGranulatorDisplayValues() {
+      // List of sliders that need display updates
+      const sliders = [
+        'granulator-volume',
+        'granulator-grain-size',
+        'granulator-grain-overlap',
+        'granulator-time-stretch',
+        'granulator-attack',
+        'granulator-release',
+        'granulator-position-min',
+        'granulator-position-max',
+        'granulator-position-random',
+        'granulator-position-speed',
+        'granulator-pitch-shift',
+        'granulator-pitch-random',
+        'granulator-voices',
+        'granulator-spread'
+      ];
+      
+      sliders.forEach(id => {
+        const slider = document.getElementById(id);
+        const display = document.getElementById(`${id}-display`);
+        
+        if (slider && display) {
+          // Update on input (for immediate feedback)
+          slider.addEventListener('input', () => {
+            display.textContent = slider.value;
+            
+            // Also send the parameter change right away
+            handleGranulatorParamChange({ target: slider });
+          });
+          
+          // Set initial display value
+          display.textContent = slider.value;
+        }
+      });
+    }
+
+    // Handle Granulator parameter changes
+    function handleGranulatorParamChange(event) {
+      const slider = event.target;
+      const id = slider.id;
+      const value = parseFloat(slider.value);
+      
+      // Map UI controls to parameters
+      switch (id) {
+        case 'granulator-volume':
+          setGranulatorParams({ masterVolume: value });
+          break;
+          
+        case 'granulator-grain-size':
+          setGranulatorParams({ grainSize: value });
+          break;
+          
+        case 'granulator-grain-overlap':
+          setGranulatorParams({ grainOverlap: value });
+          break;
+          
+        case 'granulator-time-stretch':
+          setGranulatorParams({ timeStretch: value });
+          break;
+          
+        case 'granulator-attack':
+          setGranulatorParams({ attack: value });
+          break;
+          
+        case 'granulator-release':
+          setGranulatorParams({ release: value });
+          break;
+          
+        case 'granulator-position-min':
+          setGranulatorParams({ positionMin: value });
+          
+          // Update waveform selection
+          if (granulatorWaveform) {
+            granulatorWaveform.selectionStart = value;
+            granulatorWaveform.updateSelection();
+          }
+          break;
+          
+        case 'granulator-position-max':
+          setGranulatorParams({ positionMax: value });
+          
+          // Update waveform selection
+          if (granulatorWaveform) {
+            granulatorWaveform.selectionEnd = value;
+            granulatorWaveform.updateSelection();
+          }
+          break;
+          
+        case 'granulator-position-random':
+          setGranulatorParams({ positionRandom: value });
+          break;
+          
+        case 'granulator-position-speed':
+          setGranulatorParams({ positionSpeed: value });
+          break;
+          
+        case 'granulator-pitch-shift':
+          setGranulatorParams({ pitchShift: value });
+          break;
+          
+        case 'granulator-pitch-random':
+          setGranulatorParams({ pitchRandom: value });
+          break;
+          
+        case 'granulator-voices':
+          setGranulatorParams({ voices: value });
+          break;
+          
+        case 'granulator-spread':
+          setGranulatorParams({ spread: value });
+          break;
+      }
+    }
+
+    // Handle envelope shape changes
+    function initGranulatorEnvelopeShape() {
+      const shapeSelect = document.getElementById('granulator-envelope-shape');
+      if (shapeSelect) {
+        shapeSelect.addEventListener('change', () => {
+          setGranulatorParams({ shape: shapeSelect.value });
+        });
+      }
+    }
+
+    // Handle granulator toggle
+    function initGranulatorToggle() {
+      const toggle = document.getElementById('granulator-toggle');
+      if (toggle) {
+        toggle.addEventListener('change', () => {
+          const isOn = toggle.checked;
+          const label = toggle.parentElement.nextElementSibling;
+          
+          if (label) {
+            label.textContent = isOn ? 'On' : 'Off';
+          }
+          
+          toggleGranulator(isOn);
+        });
+      }
+    }
+
+    // Handle audio file input
+    function initAudioFileInput() {
+      const fileInput = document.getElementById('audio-file-input');
+      
+      if (fileInput) {
+        fileInput.addEventListener('change', (event) => {
+          if (event.target.files.length > 0) {
+            const file = event.target.files[0];
+            
+            // First ensure audio context is initialized
+            if (!audioContextReady) {
+              initializeAudioContext();
+            }
+            
+            // Load the file
+            loadGranulatorSample(file)
+              .then(() => {
+                // Auto-start if toggle is on
+                const toggle = document.getElementById('granulator-toggle');
+                if (toggle && toggle.checked) {
+                  startGranulator();
+                }
+              })
+              .catch(err => {
+                logToScreen(`Error loading file: ${err}`);
+              });
+          }
+        });
+      }
+    }
+
+    // Create the waveform visualization instance
+    let granulatorWaveform = null;
+
+    // Initialize waveform visualization
+    function initGranulatorWaveform() {
+      if (document.getElementById('granulator-waveform')) {
+        granulatorWaveform = new GranulatorWaveform();
+      }
+    }
+
+    // Connect to sample loading events
+    function listenForGranulatorEvents() {
+      document.addEventListener('granulator:sampleLoaded', (e) => {
+        if (e.detail && e.detail.buffer) {
+          // Update the waveform with the new sample buffer
+          if (granulatorWaveform) {
+            granulatorWaveform.loadSample(e.detail.buffer);
+          }
+        }
+      });
+    }
+
+    // Initialize all controls when the document is ready
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize UI components
+      initGranulatorTabs();
+      initGranulatorDisplayValues();
+      initGranulatorEnvelopeShape();
+      initGranulatorToggle();
+      initAudioFileInput();
+      
+      // Initialize audio context on user gesture
+      document.body.addEventListener('click', () => {
+        if (!audioContextReady) {
+          initializeAudioContext();
+        }
+      }, { once: true });
+      
+      // Initialize waveform visualization
+      initGranulatorWaveform();
+      
+      // Listen for granulator events
+      listenForGranulatorEvents();
+      
+      // Log startup complete
+      logToScreen("Granulator initialized. Please load an audio file to begin.");
+    });
+  </script>
+</body>
+</html>
