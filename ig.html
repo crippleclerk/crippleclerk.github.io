@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instagram-Style Media Capture</title>
+  <style>
+    /* Base styles */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    /* Capture UI styles */
+    .capture-ui {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .capture-preview-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background-color: #000;
+    }
+    
+    #capture-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    .capture-controls {
+      position: relative;
+      padding: 20px;
+      background-color: #000;
+    }
+    
+    .capture-top-controls {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    
+    .capture-bottom-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .capture-btn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 8px;
+    }
+    
+    .capture-main-btn {
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background-color: white;
+      border: 4px solid rgba(255,255,255,0.3);
+    }
+    
+    .capture-main-btn.recording {
+      background-color: #ff4757;
+      width: 60px;
+      height: 60px;
+      border-radius: 15px;
+    }
+    
+    .capture-mode-toggle {
+      display: flex;
+      justify-content: center;
+      background: rgba(0,0,0,0.3);
+      border-radius: 25px;
+      overflow: hidden;
+      margin: 0 auto;
+      width: 80%;
+    }
+    
+    .mode-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: none;
+      color: white;
+      cursor: pointer;
+    }
+    
+    .mode-active {
+      background-color: rgba(255,255,255,0.2);
+      font-weight: bold;
+    }
+    
+    .capture-flash {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.1s;
+    }
+    
+    .capture-flash.active {
+      opacity: 1;
+    }
+    
+    .capture-countdown {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 100px;
+      color: white;
+      text-shadow: 0 0 20px rgba(0,0,0,0.7);
+      pointer-events: none;
+      opacity: 0;
+    }
+    
+    .capture-countdown.active {
+      opacity: 1;
+    }
+    
+    .capture-timer {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(0,0,0,0.5);
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-weight: bold;
+      opacity: 0;
+    }
+    
+    .capture-timer.active {
+      opacity: 1;
+    }
+    
+    .capture-result {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      z-index: 10001;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .capture-result-preview {
+      flex: 1;
+      object-fit: contain;
+      width: 100%;
+      background-color: #000;
+    }
+    
+    .result-actions {
+      display: flex;
+      justify-content: space-around;
+      padding: 20px;
+    }
+    
+    .result-btn {
+      padding: 12px 30px;
+      border: none;
+      border-radius: 20px;
+      background-color: rgba(255,255,255,0.2);
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .save-btn {
+      background-color: #1e88e5;
+    }
+
+    /* Instagram-style button */
+    #instagram-capture-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background-color: #d6249f;
+      background-image: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+      box-shadow: 0px 3px 10px rgba(0,0,0,.25);
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.9;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+
+    #instagram-capture-btn:hover {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <h1 style="text-align:center; margin: 20px;">Instagram-Style Media Capture Demo</h1>
+  <p style="text-align:center; color: #ccc;">Click the camera button to take photos, record videos, or capture your screen</p>
+
+  <script>
+    class MediaCapture {
+      constructor() {
+        this.state = {
+          mode: 'photo',
+          recording: false,
+          stream: null,
+          mediaRecorder: null,
+          videoTimer: null,
+          recordingStartTime: 0,
+          videoMaxDuration: 15000,
+          countdownTimer: null,
+          countdownSeconds: 0,
+          flashActive: false,
+          usingFrontCamera: false,
+          lastPhotoUrl: null,
+          lastVideoUrl: null,
+          recordedChunks: []
+        };
+        
+        this.setup();
+      }
+      
+      log(msg) {
+        console.log(`[MediaCapture] ${msg}`);
+      }
+      
+      setup() {
+        // Create the UI container
+        const container = document.createElement('div');
+        container.id = 'media-capture-container';
+        container.innerHTML = `
+          <div class="capture-ui" style="display: none;">
+            <div class="capture-preview-container">
+              <video id="capture-preview" playsinline autoplay muted></video>
+              <div id="capture-flash" class="capture-flash"></div>
+              <div id="capture-countdown" class="capture-countdown"></div>
+              <div id="capture-timer" class="capture-timer"></div>
+            </div>
+            
+            <div class="capture-controls">
+              <div class="capture-top-controls">
+                <button id="capture-close" class="capture-btn capture-close-btn">✕</button>
+                <div class="capture-options">
+                  <button id="capture-flash-toggle" class="capture-btn capture-option-btn">⚡</button>
+                  <button id="capture-countdown-toggle" class="capture-btn capture-option-btn">⏱️</button>
+                </div>
+              </div>
+              
+              <div class="capture-bottom-controls">
+                <button id="capture-gallery" class="capture-btn capture-gallery-btn">🖼️</button>
+                <button id="capture-button" class="capture-btn capture-main-btn"></button>
+                <button id="capture-switch-camera" class="capture-btn capture-switch-btn">🔄</button>
+              </div>
+              
+              <div class="capture-mode-toggle">
+                <button id="mode-photo" class="mode-btn mode-active">Photo</button>
+                <button id="mode-video" class="mode-btn">Video</button>
+                <button id="mode-screen" class="mode-btn">Screen</button>
+              </div>
+            </div>
+            
+            <div class="capture-result" style="display: none;">
+              <img id="capture-result-img" class="capture-result-preview" />
+              <video id="capture-result-video" class="capture-result-preview" controls></video>
+              <div class="result-actions">
+                <button id="retake-btn" class="result-btn">Retake</button>
+                <button id="save-btn" class="result-btn save-btn">Save</button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        // Add to document
+        document.body.appendChild(container);
+        
+        // Cache element references
+        this.elements = {
+          container: container,
+          ui: container.querySelector('.capture-ui'),
+          preview: document.getElementById('capture-preview'),
+          captureBtn: document.getElementById('capture-button'),
+          switchCameraBtn: document.getElementById('capture-switch-camera'),
+          closeBtn: document.getElementById('capture-close'),
+          flashToggle: document.getElementById('capture-flash-toggle'),
+          timerDisplay: document.getElementById('capture-timer'),
+          countdownDisplay: document.getElementById('capture-countdown'),
+          galleryBtn: document.getElementById('capture-gallery'),
+          countdownToggle: document.getElementById('capture-countdown-toggle'),
+          flashElement: document.getElementById('capture-flash'),
+          resultContainer: container.querySelector('.capture-result'),
+          resultImg: document.getElementById('capture-result-img'),
+          resultVideo: document.getElementById('capture-result-video'),
+          retakeBtn: document.getElementById('retake-btn'),
+          saveBtn: document.getElementById('save-btn'),
+          modePhoto: document.getElementById('mode-photo'),
+          modeVideo: document.getElementById('mode-video'),
+          modeScreen: document.getElementById('mode-screen')
+        };
+        
+        // Set up event listeners
+        this.setupEventListeners();
+        
+        // Add the floating capture button
+        this.addCaptureButton();
+      }
+      
+      setupEventListeners() {
+        // Main capture button
+        this.elements.captureBtn.addEventListener('click', () => this.handleCaptureClick());
+        
+        // Switch camera button
+        this.elements.switchCameraBtn.addEventListener('click', () => this.switchCamera());
+        
+        // Close button
+        this.elements.closeBtn.addEventListener('click', () => this.hide());
+        
+        // Mode toggle
+        this.elements.modePhoto.addEventListener('click', () => this.setMode('photo'));
+        this.elements.modeVideo.addEventListener('click', () => this.setMode('video'));
+        this.elements.modeScreen.addEventListener('click', () => this.setMode('screen'));
+        
+        // Flash toggle
+        this.elements.flashToggle.addEventListener('click', () => this.toggleFlash());
+        
+        // Countdown toggle
+        this.elements.countdownToggle.addEventListener('click', () => this.toggleCountdown());
+        
+        // Result actions
+        this.elements.retakeBtn.addEventListener('click', () => this.retakeCapture());
+        this.elements.saveBtn.addEventListener('click', () => this.saveCapture());
+      }
+      
+      addCaptureButton() {
+        const captureBtn = document.createElement('button');
+        captureBtn.id = 'instagram-capture-btn';
+        captureBtn.innerHTML = '📷';
+        captureBtn.title = 'Take Photo/Video';
+        
+        captureBtn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.show();
+        };
+        
+        document.body.appendChild(captureBtn);
+      }
+      
+      show() {
+        this.elements.ui.style.display = 'flex';
+        this.elements.resultContainer.style.display = 'none';
+        this.startCamera();
+      }
+      
+      hide() {
+        this.elements.ui.style.display = 'none';
+        this.stopMediaCapture();
+      }
+      
+      async startCamera() {
+        try {
+          this.stopMediaCapture();
+          
+          const facingMode = this.state.usingFrontCamera ? 'user' : 'environment';
+          
+          const constraints = {
+            video: { 
+              facingMode: facingMode,
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: this.state.mode === 'video'
+          };
+          
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          this.state.stream = stream;
+          
+          this.elements.preview.srcObject = stream;
+          
+          await new Promise(resolve => {
+            this.elements.preview.onloadedmetadata = resolve;
+          });
+          
+          await this.elements.preview.play();
+          
+          this.log(`Camera started: ${facingMode} camera`);
+          
+          this.updateUI();
+          
+        } catch (error) {
+          this.log(`Camera error: ${error.message}`);
+          alert(`Could not access camera: ${error.message}`);
+        }
+      }
+      
+      stopMediaCapture() {
+        if (this.state.recording && this.state.mediaRecorder) {
+          this.state.mediaRecorder.stop();
+          this.state.recording = false;
+        }
+        
+        if (this.state.countdownTimer) {
+          clearInterval(this.state.countdownTimer);
+          this.state.countdownTimer = null;
+        }
+        
+        if (this.state.videoTimer) {
+          clearInterval(this.state.videoTimer);
+          this.state.videoTimer = null;
+        }
+        
+        if (this.state.stream) {
+          this.state.stream.getTracks().forEach(track => track.stop());
+          this.state.stream = null;
+        }
+        
+        this.elements.timerDisplay.classList.remove('active');
+        this.elements.countdownDisplay.classList.remove('active');
+        this.elements.captureBtn.classList.remove('recording');
+        this.elements.flashElement.classList.remove('active');
+        
+        this.state.mediaRecorder = null;
+        this.state.recordedChunks = [];
+      }
+      
+      async switchCamera() {
+        this.state.usingFrontCamera = !this.state.usingFrontCamera;
+        this.log(`Switching to ${this.state.usingFrontCamera ? 'front' : 'rear'} camera`);
+        await this.startCamera();
+      }
+      
+      async setMode(mode) {
+        if (this.state.mode === mode) return;
+        
+        this.state.mode = mode;
+        
+        this.elements.modePhoto.classList.toggle('mode-active', mode === 'photo');
+        this.elements.modeVideo.classList.toggle('mode-active', mode === 'video');
+        this.elements.modeScreen.classList.toggle('mode-active', mode === 'screen');
+        
+        if (mode === 'screen') {
+          await this.startScreenCapture();
+        } else {
+          await this.startCamera();
+        }
+        
+        this.updateUI();
+      }
+      
+      updateUI() {
+        if (this.state.mode === 'photo') {
+          this.elements.captureBtn.style.borderRadius = '50%';
+          this.elements.switchCameraBtn.style.display = 'block';
+          this.elements.flashToggle.style.display = 'block';
+        } else if (this.state.mode === 'video') {
+          this.elements.captureBtn.style.borderRadius = this.state.recording ? '15px' : '50%';
+          this.elements.switchCameraBtn.style.display = 'block';
+          this.elements.flashToggle.style.display = 'none';
+        } else if (this.state.mode === 'screen') {
+          this.elements.captureBtn.style.borderRadius = this.state.recording ? '15px' : '50%';
+          this.elements.switchCameraBtn.style.display = 'none';
+          this.elements.flashToggle.style.display = 'none';
+        }
+      }
+      
+      toggleFlash() {
+        this.state.flashActive = !this.state.flashActive;
+        this.elements.flashToggle.style.opacity = this.state.flashActive ? '1' : '0.5';
+        this.log(`Flash ${this.state.flashActive ? 'enabled' : 'disabled'}`);
+      }
+      
+      toggleCountdown() {
+        this.state.countdownSeconds = this.state.countdownSeconds === 0 ? 3 : 0;
+        this.elements.countdownToggle.style.opacity = this.state.countdownSeconds > 0 ? '1' : '0.5';
+        this.log(`Countdown ${this.state.countdownSeconds > 0 ? 'enabled: ' + this.state.countdownSeconds + 's' : 'disabled'}`);
+      }
+      
+      async handleCaptureClick() {
+        if (this.state.countdownSeconds > 0) {
+          this.startCountdown(() => {
+            if (this.state.mode === 'photo') {
+              this.capturePhoto();
+            } else {
+              this.toggleRecording();
+            }
+          });
+          return;
+        }
+        
+        if (this.state.mode === 'photo') {
+          this.capturePhoto();
+        } else {
+          this.toggleRecording();
+        }
+      }
+      
+      startCountdown(callback) {
+        let count = this.state.countdownSeconds;
+        
+        this.elements.countdownDisplay.textContent = count;
+        this.elements.countdownDisplay.classList.add('active');
+        
+        this.state.countdownTimer = setInterval(() => {
+          count--;
+          
+          if (count <= 0) {
+            clearInterval(this.state.countdownTimer);
+            this.state.countdownTimer = null;
+            this.elements.countdownDisplay.classList.remove('active');
+            callback();
+          } else {
+            this.elements.countdownDisplay.textContent = count;
+          }
+        }, 1000);
+      }
+      
+      async capturePhoto() {
+        if (!this.state.stream) {
+          this.log('No camera stream available');
+          return;
+        }
+        
+        try {
+          const canvas = document.createElement('canvas');
+          const video = this.elements.preview;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          if (this.state.flashActive) {
+            this.elements.flashElement.classList.add('active');
+            setTimeout(() => {
+              this.elements.flashElement.classList.remove('active');
+            }, 200);
+          }
+          
+          const imageUrl = canvas.toDataURL('image/jpeg', 0.85);
+          this.state.lastPhotoUrl = imageUrl;
+          
+          this.showCaptureResult(imageUrl, 'photo');
+          
+          this.log('Photo captured');
+          
+        } catch (error) {
+          this.log(`Error capturing photo: ${error.message}`);
+        }
+      }
+      
+      toggleRecording() {
+        if (this.state.recording) {
+          this.stopRecording();
+        } else {
+          this.startRecording();
+        }
+      }
+      
+      async startRecording() {
+        if (!this.state.stream) {
+          this.log('No media stream available');
+          return;
+        }
+        
+        try {
+          const options = { mimeType: 'video/webm;codecs=vp9,opus' };
+          this.state.mediaRecorder = new MediaRecorder(this.state.stream, options);
+          
+          this.state.recordedChunks = [];
+          
+          this.state.mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              this.state.recordedChunks.push(event.data);
+            }
+          };
+          
+          this.state.mediaRecorder.onstop = () => {
+            const blob = new Blob(this.state.recordedChunks, { type: 'video/webm' });
+            const videoUrl = URL.createObjectURL(blob);
+            this.state.lastVideoUrl = videoUrl;
+            
+            this.state.recording = false;
+            this.elements.captureBtn.classList.remove('recording');
+            this.elements.timerDisplay.classList.remove('active');
+            
+            if (this.state.videoTimer) {
+              clearInterval(this.state.videoTimer);
+              this.state.videoTimer = null;
+            }
+            
+            this.showCaptureResult(videoUrl, 'video');
+            
+            this.log('Recording stopped');
+          };
+          
+          this.state.mediaRecorder.start();
+          this.state.recording = true;
+          this.state.recordingStartTime = Date.now();
+          
+          this.elements.captureBtn.classList.add('recording');
+          this.elements.timerDisplay.classList.add('active');
+          
+          this.updateVideoTimer();
+          this.state.videoTimer = setInterval(() => this.updateVideoTimer(), 1000);
+          
+          setTimeout(() => {
+            if (this.state.recording) {
+              this.stopRecording();
+            }
+          }, this.state.videoMaxDuration);
+          
+          this.log(`${this.state.mode === 'screen' ? 'Screen' : 'Video'} recording started`);
+          
+        } catch (error) {
+          this.log(`Error starting recording: ${error.message}`);
+        }
+      }
+      
+      updateVideoTimer() {
+        if (!this.state.recording) return;
+        
+        const elapsedMs = Date.now() - this.state.recordingStartTime;
+        const elapsedSecs = Math.floor(elapsedMs / 1000);
+        const mins = Math.floor(elapsedSecs / 60);
+        const secs = elapsedSecs % 60;
+        
+        this.elements.timerDisplay.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+      }
+      
+      stopRecording() {
+        if (this.state.mediaRecorder && this.state.recording) {
+          this.state.mediaRecorder.stop();
+        }
+      }
+      
+      async startScreenCapture() {
+        try {
+          this.stopMediaCapture();
+          
+          const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {
+              cursor: 'always'
+            },
+            audio: false
+          });
+          
+          this.state.stream = stream;
+          
+          this.elements.preview.srcObject = stream;
+          
+          stream.getVideoTracks()[0].onended = () => {
+            this.log('Screen sharing ended by user');
+            this.startCamera();
+          };
+          
+          this.log('Screen capture started');
+          
+        } catch (error) {
+          this.log(`Screen capture error: ${error.message}`);
+          alert(`Could not capture screen: ${error.message}`);
+          
+          this.state.mode = 'photo';
+          this.startCamera();
+        }
+      }
+      
+      showCaptureResult(url, type) {
+        if (type === 'photo') {
+          this.elements.resultImg.src = url;
+          this.elements.resultImg.style.display = 'block';
+          this.elements.resultVideo.style.display = 'none';
+        } else {
+          this.elements.resultVideo.src = url;
+          this.elements.resultVideo.style.display = 'block';
+          this.elements.resultImg.style.display = 'none';
+          
+          this.elements.resultVideo.play().catch(err => {
+            this.log(`Video preview error: ${err.message}`);
+          });
+        }
+        
+        this.elements.resultContainer.style.display = 'flex';
+      }
+      
+      retakeCapture() {
+        this.elements.resultContainer.style.display = 'none';
+        
+        if (this.elements.resultVideo.src) {
+          URL.revokeObjectURL(this.elements.resultVideo.src);
+          this.elements.resultVideo.src = '';
+        }
+        
+        this.startCamera();
+      }
+      
+      saveCapture() {
+        try {
+          const isPhoto = this.elements.resultImg.style.display !== 'none';
+          const url = isPhoto ? this.elements.resultImg.src : this.elements.resultVideo.src;
+          const filename = isPhoto 
+            ? `photo_${new Date().toISOString().replace(/[:.]/g, '-')}.jpg`
+            : `video_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+          
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          
+          this.log(`${isPhoto ? 'Photo' : 'Video'} saved as ${filename}`);
+          
+          setTimeout(() => this.retakeCapture(), 500);
+          
+        } catch (error) {
+          this.log(`Error saving media: ${error.message}`);
+          alert('Failed to save. Please try again.');
+        }
+      }
+    }
+    
+    // Initialize when the page loads
+    window.addEventListener('DOMContentLoaded', () => {
+      const mediaCapture = new MediaCapture();
+    });
+  </script>
+</body>
+</html>
