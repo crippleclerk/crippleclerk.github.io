@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Granular Synthesizer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    }
+    
+    canvas {
+      display: block;
+    }
+    
+    .hint {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      background-color: rgba(0, 0, 0, 0.3);
+      color: white;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      transition: opacity 1s;
+      opacity: 0.8;
+    }
+    
+    .hint:hover {
+      opacity: 1;
+    }
+    
+    .info {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      background-color: rgba(0, 0, 0, 0.3);
+      color: white;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <div class="hint" id="hint">Move cursor to control sound</div>
+  <div class="info">Interactive Granular Synthesizer</div>
+
+  <!-- Import Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/controls/OrbitControls.js"></script>
+
+  <script>
+    // Granulator class
+    class Grain {
+      constructor(options) {
+        this.id = options.id;
+        this.startTime = options.startTime;
+        this.endTime = options.endTime;
+        this.position = options.position;
+        this.duration = options.duration;
+        this.pitch = options.pitch;
+        this.pan = options.pan;
+        this.voice = options.voice;
+        this.nodes = {};
+        this.isActive = true;
+      }
+
+      createAudioNodes(audioContext, granulatorState) {
+        if (!granulatorState.sampleBuffer) return;
+
+        const { attack, release, shape, masterVolume } = granulatorState;
+        const now = audioContext.currentTime;
+
+        // Source node (buffer player)
+        const source = audioContext.createBufferSource();
+        source.buffer = granulatorState.sampleBuffer;
+
+        // Apply pitch shift
+        if (this.pitch !== 0) {
+          source.detune.value = this.pitch * 100; // convert semitones to cents
+        }
+
+        // Calculate the start position in the buffer
+        const sampleOffset = this.position * granulatorState.sampleBuffer.duration;
+
+        // Envelope (gain node)
+        const envelope = audioContext.createGain();
+        envelope.gain.value = 0;
+
+        // Master volume node (separate from envelope)
+        const volumeNode = audioContext.createGain();
+        volumeNode.gain.value = masterVolume;
+
+        // Ensure we have enough time for all envelope phases
+        const safeAttack = Math.min(attack, this.duration * 0.4);
+        const safeRelease = Math.min(release, this.duration * 0.4);
+        const sustainTime = Math.max(0, this.duration - safeAttack - safeRelease);
+
+        // Calculate precise timing for each envelope phase
+        const attackEnd = now + safeAttack;
+        const releaseStart = attackEnd + sustainTime;
+
+        // Set initial gain to 0
+        envelope.gain.setValueAtTime(0, now);
+
+        // Apply attack phase based on envelope shape
+        if (shape === "cos") {
+          try {
+            // Use linear ramp for attack instead of curve to avoid overlaps
+            envelope.gain.linearRampToValueAtTime(1, attackEnd);
+          } catch (e) {
+            console.log("Error in attack phase:", e);
+            envelope.gain.linearRampToValueAtTime(1, attackEnd);
+          }
+        } else if (shape === "exp") {
+          try {
+            // Exponential attack
+            envelope.gain.exponentialRampToValueAtTime(0.01, now + 0.001); // Start from small non-zero value
+            envelope.gain.exponentialRampToValueAtTime(1, attackEnd);
+          } catch (e) {
+            console.log("Error in exponential attack:", e);
+            envelope.gain.linearRampToValueAtTime(1, attackEnd);
+          }
+        } else {
+          // Linear attack (default)
+          envelope.gain.linearRampToValueAtTime(1, attackEnd);
+        }
+
+        // Sustain phase - hold at full volume
+        envelope.gain.setValueAtTime(1, attackEnd);
+
+        // Apply release phase based on envelope shape
+        if (shape === "cos") {
+          try {
+            // Use linear ramp for release instead of curve to avoid overlaps
+            envelope.gain.linearRampToValueAtTime(0, releaseStart + safeRelease);
+          } catch (e) {
+            console.log("Error in release phase:", e);
+            envelope.gain.linearRampToValueAtTime(0, releaseStart + safeRelease);
+          }
+        } else if (shape === "exp") {
+          try {
+            // Exponential release
+            envelope.gain.setValueAtTime(1, releaseStart);
+            envelope.gain.exponentialRampToValueAtTime(0.01, releaseStart + safeRelease); // End at small value
+          } catch (e) {
+            console.log("Error in exponential release:", e);
+            envelope.gain.linearRampToValueAtTime(0, releaseStart + safeRelease);
+          }
+        } else {
+          // Linear release (default)
+          envelope.gain.linearRampToValueAtTime(0, releaseStart + safeRelease);
+        }
+
+        // Connect the audio chain with volume control
+        source.connect(envelope);
+        envelope.connect(volumeNode);
+
+        // Create panner if spread > 0
+        let panner = null;
+        if (granulatorState.spread > 0 && this.pan !== 0) {
+          panner = audioContext.createStereoPanner();
+          panner.pan.value = this.pan;
+        }
+
+        if (panner) {
+          volumeNode.connect(panner);
+          panner.connect(audioContext.destination);
+        } else {
+          volumeNode.connect(audioContext.destination);
+        }
+
+        // Schedule playback
+        source.start(now, sampleOffset, this.duration * 1.5); // Allow a bit more time for the envelope
+        source.stop(now + this.duration + 0.05); // Small buffer after envelope completes
+
+        // Store nodes for later cleanup
+        this.nodes = {
+          source,
+          envelope,
+          volumeNode,
+          panner,
+        };
+
+        // Clean up after playback ends
+        source.onended = () => {
+          this.isActive = false;
+          this.disconnect();
+
+          // Remove from active grains array
+          const index = granulatorState.activeGrains.findIndex((g) => g.id === this.id);
+          if (index !== -1) {
+            granulatorState.activeGrains.splice(index, 1);
+          }
+        };
+      }
+
+      disconnect() {
+        if (this.nodes.source) {
+          this.nodes.source.disconnect();
+        }
+        if (this.nodes.envelope) {
+          this.nodes.envelope.disconnect();
+        }
+        if (this.nodes.volumeNode) {
+          this.nodes.volumeNode.disconnect();
+        }
+        if (this.nodes.panner) {
+          this.nodes.panner.disconnect();
+        }
+        this.nodes = {};
+      }
+    }
+
+    // Main application
+    document.addEventListener('DOMContentLoaded', () => {
+      // Initialize state
+      const mousePosition = { x: 0, y: 0 };
+      let audioContext = null;
+      let audioInitialized = false;
+      let mouseHasMoved = false;
+      const granulatorState = {
+        sampleBuffer: null,
+        sampleDuration: 0,
+        sampleRate: 0,
+        isPlaying: false,
+        grainSize: 0.1,
+        grainOverlap: 2,
+        positionMin: 0,
+        positionMax: 1,
+        positionRandom: 0.1,
+        positionSpeed: 0,
+        pitchShift: 0,
+        pitchRandom: 0,
+        timeStretch: 1.0,
+        attack: 0.1,
+        release: 0.1,
+        shape: "cos",
+        masterVolume: 0.7,
+        voices: 1,
+        spread: 0,
+        playheadPosition: 0,
+        activeGrains: [],
+        grainCounter: 0,
+        schedulerTimerId: null,
+        _pendingReschedule: false
+      };
+
+      // Function to load audio sample
+      const loadSample = async (url) => {
+        if (!audioContext) {
+          try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          } catch (err) {
+            console.error("Failed to create audio context:", err);
+            return null;
+          }
+        }
+
+        try {
+          console.log("Attempting to load audio from:", url);
+          const response = await fetch(url);
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+
+          if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+            throw new Error("Received empty audio file");
+          }
+
+          console.log("Audio file fetched, size:", arrayBuffer.byteLength, "bytes");
+
+          // Try to decode the audio data
+          const audioBuffer = await audioContext.decodeAudioData(arrayBuffer).catch((err) => {
+            console.error("Error decoding audio data:", err);
+            throw new Error("Unable to decode audio data. The file may be corrupted or in an unsupported format.");
+          });
+
+          granulatorState.sampleBuffer = audioBuffer;
+          granulatorState.sampleDuration = audioBuffer.duration;
+          granulatorState.sampleRate = audioBuffer.sampleRate;
+
+          console.log(`Sample loaded: ${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.sampleRate}Hz`);
+          return audioBuffer;
+        } catch (err) {
+          console.error("Error loading sample:", err);
+
+          // Try loading a fallback audio file or create a simple tone
+          console.log("Attempting to create a fallback audio tone...");
+          return createFallbackAudioBuffer();
+        }
+      };
+
+      // Function to create a fallback audio buffer with a simple tone
+      const createFallbackAudioBuffer = () => {
+        if (!audioContext) return null;
+
+        try {
+          // Create a 1-second buffer with a simple sine wave tone
+          const sampleRate = audioContext.sampleRate;
+          const duration = 1.0; // seconds
+          const audioBuffer = audioContext.createBuffer(2, sampleRate * duration, sampleRate);
+
+          // Fill both channels with a simple sine wave
+          for (let channel = 0; channel < 2; channel++) {
+            const channelData = audioBuffer.getChannelData(channel);
+            for (let i = 0; i < channelData.length; i++) {
+              // Simple sine wave at 440Hz (A4 note)
+              channelData[i] = Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 0.5;
+            }
+          }
+
+          granulatorState.sampleBuffer = audioBuffer;
+          granulatorState.sampleDuration = duration;
+          granulatorState.sampleRate = sampleRate;
+
+          console.log("Created fallback audio tone");
+          return audioBuffer;
+        } catch (err) {
+          console.error("Failed to create fallback audio:", err);
+          return null;
+        }
+      };
+
+      // Function to schedule the next grain
+      const scheduleNextGrain = () => {
+        if (!granulatorState.isPlaying || !granulatorState.sampleBuffer || !audioContext) {
+          return;
+        }
+
+        try {
+          const now = audioContext.currentTime;
+          const state = granulatorState;
+
+          // Calculate base values for this grain
+          let basePosition = state.playheadPosition;
+
+          // Apply position randomization if enabled
+          if (state.positionRandom > 0) {
+            const randomOffset = (Math.random() * 2 - 1) * state.positionRandom;
+            basePosition += randomOffset;
+
+            // Clamp position to valid range
+            basePosition = Math.max(state.positionMin, Math.min(state.positionMax, basePosition));
+          }
+
+          // Schedule grains for each voice
+          for (let v = 0; v < state.voices; v++) {
+            // Calculate voice-specific position with slight variations
+            let position = basePosition;
+            if (state.voices > 1) {
+              // Add slight position variation for each voice
+              position += (v / state.voices) * 0.01 * state.positionRandom;
+            }
+
+            // Calculate voice-specific pitch
+            let pitch = state.pitchShift;
+            if (state.pitchRandom > 0) {
+              // Add random pitch variation
+              pitch += (Math.random() * 2 - 1) * state.pitchRandom;
+            }
+
+            // Calculate stereo panning based on spread and voice
+            let pan = 0;
+            if (state.spread > 0 && state.voices > 1) {
+              // Distribute voices across stereo field
+              pan = ((v / (state.voices - 1)) * 2 - 1) * state.spread;
+            }
+
+            // Create the grain
+            const grain = new Grain({
+              id: state.grainCounter++,
+              startTime: now,
+              endTime: now + state.grainSize,
+              position: position,
+              duration: state.grainSize * state.timeStretch,
+              pitch: pitch,
+              pan: pan,
+              voice: v,
+            });
+
+            // Initialize audio processing for the grain
+            grain.createAudioNodes(audioContext, state);
+
+            // Add to active grains
+            state.activeGrains.push(grain);
+          }
+
+          // Update playhead position for next grain
+          updatePlayheadPosition();
+        } catch (err) {
+          console.error("Error scheduling grain:", err);
+          // Continue playing despite errors
+        }
+      };
+
+      // Function to update playhead position
+      const updatePlayheadPosition = () => {
+        const state = granulatorState;
+        if (state.positionSpeed !== 0) {
+          // Move playhead based on speed
+          state.playheadPosition += state.positionSpeed / 100;
+
+          // Handle wrapping or bouncing at boundaries
+          if (state.playheadPosition > state.positionMax) {
+            if (state.positionSpeed > 0) {
+              // Wrap around to start
+              state.playheadPosition = state.positionMin;
+            } else {
+              // Bounce
+              state.playheadPosition = state.positionMax;
+              state.positionSpeed = -state.positionSpeed;
+            }
+          } else if (state.playheadPosition < state.positionMin) {
+            if (state.positionSpeed < 0) {
+              // Wrap around to end
+              state.playheadPosition = state.positionMax;
+            } else {
+              // Bounce
+              state.playheadPosition = state.positionMin;
+              state.positionSpeed = -state.positionSpeed;
+            }
+          }
+        }
+      };
+
+      // Function to start granulator
+      const startGranulator = () => {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const state = granulatorState;
+        if (!state.sampleBuffer) {
+          console.log("No sample loaded. Cannot start granulator.");
+          return;
+        }
+
+        if (state.isPlaying) {
+          console.log("Granulator is already playing.");
+          return;
+        }
+
+        state.isPlaying = true;
+        state.playheadPosition = state.positionMin;
+
+        // Calculate grain scheduling interval with safety limits
+        const schedulingInterval = Math.max((state.grainSize / state.grainOverlap) * 1000, 10);
+
+        // Start the grain scheduler
+        scheduleNextGrain();
+        state.schedulerTimerId = window.setInterval(scheduleNextGrain, schedulingInterval);
+
+        console.log("Granulator started.");
+      };
+
+      // Function to stop granulator
+      const stopGranulator = () => {
+        const state = granulatorState;
+        if (!state.isPlaying) {
+          return;
+        }
+
+        // Stop the scheduler
+        if (state.schedulerTimerId) {
+          clearInterval(state.schedulerTimerId);
+          state.schedulerTimerId = null;
+        }
+
+        state.isPlaying = false;
+
+        // Fade out all active grains
+        if (audioContext) {
+          const now = audioContext.currentTime;
+          state.activeGrains.forEach((grain) => {
+            if (grain.nodes.envelope) {
+              grain.nodes.envelope.gain.cancelScheduledValues(now);
+              grain.nodes.envelope.gain.setValueAtTime(grain.nodes.envelope.gain.value, now);
+              grain.nodes.envelope.gain.linearRampToValueAtTime(0, now + 0.1);
+
+              // Schedule to stop after fade out
+              if (grain.nodes.source) {
+                grain.nodes.source.stop(now + 0.15);
+              }
+            }
+          });
+        }
+
+        // Reset active grains after fade out
+        setTimeout(() => {
+          state.activeGrains = [];
+        }, 200);
+
+        console.log("Granulator stopped.");
+      };
+
+      // Utility function to clamp a value between min and max
+      const clamp = (value, min, max) => {
+        return Math.min(Math.max(value, min), max);
+      };
+
+      // Function to set granulator parameters
+      const setGranulatorParams = (params) => {
+        const state = granulatorState;
+        let hasChanges = false;
+        let needsReschedule = false;
+
+        // Update all provided parameters
+        Object.entries(params).forEach(([key, value]) => {
+          if (state[key] !== undefined && state[key] !== value) {
+            // Validate and apply parameter
+            switch (key) {
+              case "grainSize":
+                value = clamp(value, 0.01, 2.0);
+                needsReschedule = true;
+                break;
+              case "grainOverlap":
+                value = clamp(value, 1, 10);
+                needsReschedule = true;
+                break;
+              case "positionMin":
+                value = clamp(value, 0, state.positionMax);
+                break;
+              case "positionMax":
+                value = clamp(value, state.positionMin, 1);
+                break;
+              case "positionRandom":
+                value = clamp(value, 0, 1);
+                break;
+              case "positionSpeed":
+                value = clamp(value, -100, 100);
+                break;
+              case "pitchShift":
+                value = clamp(value, -24, 24);
+                break;
+              case "pitchRandom":
+                value = clamp(value, 0, 12);
+                break;
+              case "timeStretch":
+                value = clamp(value, 0.25, 4);
+                needsReschedule = true;
+                break;
+              case "attack":
+                value = clamp(value, 0.001, 1);
+                break;
+              case "release":
+                value = clamp(value, 0.001, 1);
+                break;
+              case "shape":
+                if (!["cos", "lin", "exp"].includes(value)) {
+                  value = "cos";
+                }
+                break;
+              case "voices":
+                value = clamp(Math.round(value), 1, 8);
+                break;
+              case "spread":
+                value = clamp(value, 0, 1);
+                break;
+              case "masterVolume":
+                value = clamp(value, 0, 1);
+                break;
+            }
+            // Update the parameter
+            state[key] = value;
+            hasChanges = true;
+          }
+        });
+
+        // Only reschedule if absolutely necessary and not during rapid parameter changes
+        if (hasChanges && state.isPlaying && state.schedulerTimerId && needsReschedule) {
+          // Instead of immediately clearing and restarting, schedule a change
+          // This prevents interruptions during rapid parameter changes
+          if (!state._pendingReschedule) {
+            state._pendingReschedule = true;
+
+            // Use setTimeout to debounce rapid changes
+            setTimeout(() => {
+              if (state.schedulerTimerId) {
+                clearInterval(state.schedulerTimerId);
+                const schedulingInterval = Math.max((state.grainSize / state.grainOverlap) * 1000, 10);
+                state.schedulerTimerId = window.setInterval(scheduleNextGrain, schedulingInterval);
+              }
+              state._pendingReschedule = false;
+            }, 200); // Wait 200ms before applying scheduling changes
+          }
+        }
+      };
+
+      // Function to update granulator parameters based on mouse position
+      const updateGranulatorFromMouse = (x, y, windowWidth, windowHeight) => {
+        // Normalize coordinates (0-1)
+        const normalizedX = x / windowWidth;
+        const normalizedY = y / windowHeight;
+
+        // Map mouse position to granulator parameters
+        // Use a more gentle approach to parameter changes to avoid interruptions
+        setGranulatorParams({
+          // X-axis controls pitch and position
+          pitchShift: Math.floor(normalizedX * 24) - 12, // -12 to 12 semitones
+
+          // Use smoother transitions for position boundaries
+          positionMin: clamp(normalizedX * 0.5, 0, 0.5), // 0 to 0.5
+          positionMax: clamp(0.5 + normalizedX * 0.5, 0.5, 1), // 0.5 to 1
+
+          // Y-axis controls grain size and randomness
+          // Keep grain size more stable to avoid interruptions
+          grainSize: clamp(normalizedY * 0.3 + 0.1, 0.1, 0.4), // 0.1 to 0.4 seconds
+
+          // Use more subtle randomness changes
+          positionRandom: clamp(normalizedY * 0.3, 0, 0.3), // 0 to 0.3
+          pitchRandom: clamp(normalizedY * 4, 0, 4), // 0 to 4 semitones
+
+          // Smoother spread changes
+          spread: clamp((normalizedX + normalizedY) / 2, 0, 1), // 0 to 1
+        });
+      };
+
+      // Mouse move handler
+      const handleMouseMove = (e) => {
+        mousePosition.x = e.clientX;
+        mousePosition.y = e.clientY;
+        mouseHasMoved = true;
+        
+        // Initialize audio on first mouse movement
+        if (!audioInitialized) {
+          initializeAudio();
+        }
+        
+        updateGranulatorFromMouse(e.clientX, e.clientY, window.innerWidth, window.innerHeight);
+        
+        // Update stars position more directly based on mouse position
+        const normalizedX = (e.clientX / window.innerWidth - 0.5) * 2;  // -1 to 1
+        const normalizedY = (e.clientY / window.innerHeight - 0.5) * 2; // -1 to 1
+        
+        // Move stars in response to cursor with more pronounced effect
+        stars.position.x = -normalizedX * 20;
+        stars.position.y = -normalizedY * 20;
+      };
+
+      // Function to initialize audio
+      const initializeAudio = () => {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          audioInitialized = true;
+          
+          // Load audio and start granulator
+          loadAudioWithFallbacks();
+          
+          console.log("Audio initialized on mouse movement");
+        } catch (err) {
+          console.error("Failed to initialize audio:", err);
+          
+          // If we can't initialize audio automatically, show a message to click
+          const infoElement = document.querySelector('.info');
+          infoElement.textContent = "Click anywhere to start audio";
+          
+          // Add a click handler as fallback
+          document.addEventListener('click', () => {
+            if (!audioInitialized) {
+              audioContext = new (window.AudioContext || window.webkitAudioContext)();
+              audioInitialized = true;
+              loadAudioWithFallbacks();
+              infoElement.textContent = "Interactive Granular Synthesizer";
+            }
+          }, { once: true });
+        }
+      };
+
+      // Add mouse move listener
+      window.addEventListener("mousemove", handleMouseMove);
+
+      // Animation loop
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // Color transition logic
+        colorT += colorTransitionSpeed;
+        if (colorT >= 1) {
+          colorT = 0;
+          colorIndex = nextColorIndex;
+          nextColorIndex = (nextColorIndex + 1) % colors.length;
+        }
+
+        const currentColor = lerpColor(colors[colorIndex], colors[nextColorIndex], colorT);
+
+        // Update materials with new color
+        wireframeMaterial.color = currentColor;
+        solidMaterial.color = currentColor;
+        atmosphereMaterial.uniforms.glowColor.value = currentColor;
+
+        // Rotate the globes based on mouse position
+        if (mousePosition.x && mousePosition.y) {
+          const rotationSpeedX = (mousePosition.y / window.innerHeight - 0.5) * 0.01;
+          const rotationSpeedY = (mousePosition.x / window.innerWidth - 0.5) * 0.01;
+
+          wireframeGlobe.rotation.x += rotationSpeedX;
+          wireframeGlobe.rotation.y += rotationSpeedY;
+          solidGlobe.rotation.x += rotationSpeedX;
+          solidGlobe.rotation.y += rotationSpeedY;
+          atmosphereMesh.rotation.x += rotationSpeedX * 0.5;
+          atmosphereMesh.rotation.y += rotationSpeedY * 0.5;
+
+          // Make stars move according to cursor position with a parallax effect
+          // Stars move in the opposite direction of the globe for a parallax effect
+          stars.rotation.x -= rotationSpeedX * 0.3;
+          stars.rotation.y -= rotationSpeedY * 0.3;
+
+          // Add some subtle movement in z-axis for more depth
+          const zMovement = (mousePosition.x / window.innerWidth - 0.5) * 0.5;
+          stars.position.z = zMovement;
+        } else {
+          // Default rotation if no mouse position
+          wireframeGlobe.rotation.y += 0.001;
+          solidGlobe.rotation.y += 0.001;
+          atmosphereMesh.rotation.y += 0.0005;
+          stars.rotation.y += 0.0001;
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      // Start animation loop
+      animate();
+
+      // Handle window resize
+      function handleResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+      window.addEventListener("resize", handleResize);
+
+      // Hide hint after 3 seconds
+      const hintElement = document.getElementById('hint');
+      setTimeout(() => {
+        hintElement.style.opacity = '0';
+        setTimeout(() => {
+          hintElement.style.display = 'none';
+        }, 1000);
+      }, 3000);
+
+      // If no mouse movement after 2 seconds, show a message to move mouse
+      setTimeout(() => {
+        if (!mouseHasMoved) {
+          const infoElement = document.querySelector('.info');
+          infoElement.textContent = "Move mouse to start audio";
+        }
+      }, 2000);
+
+      // Clean up function for page unload
+      window.addEventListener('beforeunload', () => {
+        stopGranulator();
+        if (audioContext && audioContext.state !== "closed") {
+          audioContext.close();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
