@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CHAOS://OVERDRIVE</title>
+<meta name="theme-color" content="#ff00ff" />
+<style>
+  :root{
+    --fg:#f6f8ff;
+    --panel:rgba(10,10,18,.65);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    color:var(--fg);
+    background:#05060a;
+    overflow:hidden;
+    font:16px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",Arial;
+  }
+
+  canvas#stage{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}
+  .cam{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    mix-blend-mode:screen;opacity:.0;transition:opacity .3s ease;
+    filter:contrast(2) saturate(1.6) hue-rotate(120deg);
+    transform:scaleX(-1);
+  }
+  .cam.on{opacity:.45}
+  .cam.g1{clip-path:polygon(0 0,100% 0,100% 42%,0 58%)}
+  .cam.g2{clip-path:polygon(0 58%,100% 42%,100% 100%,0 100%)}
+  .cam.g3{clip-path:polygon(0 0,100% 0,70% 100%,30% 100%)}
+
+  #paint{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:3;pointer-events:none}
+
+  header{position:fixed;top:1rem;left:50%;transform:translateX(-50%);z-index:4;text-align:center;user-select:none}
+  .mega{
+    position:relative;display:inline-block;text-transform:uppercase;font-weight:900;
+    font-size:clamp(32px,10vw,140px);letter-spacing:.06em;
+    text-shadow:0 0 2px #fff,0 0 16px #0ff,0 0 32px #f0f;
+    filter:drop-shadow(0 6px 24px #000a);
+  }
+  .mega span{display:inline-block}
+  .mega::before,.mega::after{content:attr(data-text);position:absolute;inset:0;pointer-events:none}
+  .mega::before{color:#0ff;transform:translate(3px,-2px)}
+  .mega::after{color:#f0f;transform:translate(-3px,2px)}
+  @keyframes jitter{0%,100%{transform:translate(0,0)} 20%{transform:translate(-1px,1px)} 40%{transform:translate(2px,-1px)} 60%{transform:translate(-2px,0)} 80%{transform:translate(1px,2px)}}
+  header.jit{animation:jitter .25s steps(2) infinite}
+
+  .panel{
+    position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);
+    display:grid;grid-template-columns:1fr 1fr;gap:.6rem 1rem;
+    min-width:min(92vw,760px);padding:1rem;border-radius:14px;
+    background:var(--panel);border:1px solid #ffffff24;
+    backdrop-filter:blur(10px) saturate(1.1);z-index:6;box-shadow:0 10px 40px #000a;
+  }
+  .panel h2{grid-column:1/-1;margin:0 0 .25rem 0;font-size:.95rem;letter-spacing:.08em;text-transform:uppercase;opacity:.9}
+  label{display:flex;gap:.5rem;align-items:center;font-size:.9rem}
+  input[type="range"]{width:100%}
+  button{padding:.65rem .8rem;border-radius:10px;border:1px solid #ffffff26;background:linear-gradient(180deg,#1a2030,#0b0f18);color:var(--fg);font-weight:800;cursor:pointer;box-shadow:inset 0 1px 0 #fff2,0 3px 16px #0008}
+  button:hover{filter:brightness(1.1)}
+  .badge{font-size:.75rem;padding:.2rem .5rem;border-radius:999px;border:1px solid #ffffff26;background:#0008;margin-left:.4rem;opacity:.85}
+
+  .sky{position:fixed;inset:0;pointer-events:none;z-index:5;overflow:hidden}
+  .drop{position:absolute;top:-10vh;font-size:clamp(18px,4vw,64px);animation:fall linear both;white-space:pre}
+  @keyframes fall{to{transform:translateY(120vh) rotate(720deg)}}
+
+  .float{
+    position:fixed;top:30vh;left:30vw;z-index:7;
+    width:clamp(220px,34vw,460px);
+    border-radius:14px;border:1px solid #ffffff22;background:linear-gradient(180deg,#0e1220,#080b12);
+    box-shadow:0 12px 40px #000c,inset 0 0 50px #fff1;user-select:none
+  }
+  .bar{display:flex;align-items:center;justify-content:space-between;padding:.6rem .8rem;border-bottom:1px solid #ffffff18;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;cursor:grab}
+  .x{width:18px;height:18px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#f66,#a00);box-shadow:0 0 10px #f006,inset 0 0 6px #fff3}
+  .content{padding:.8rem;line-height:1.25}
+  .linky{display:inline-block;padding:.25rem .45rem;border:1px dashed #fff3;border-radius:8px;background:#fff1;mix-blend-mode:difference;transform:rotate(calc(var(--r,0)*1deg))}
+
+  .shake{animation:shake .5s cubic-bezier(.36,.07,.19,.97) both}
+  @keyframes shake{10%,90%{transform:translate3d(-1px,0,0)}20%,80%{transform:translate3d(2px,0,0)}30%,50%,70%{transform:translate3d(-4px,0,0)}40%,60%{transform:translate3d(4px,0,0)}}
+
+  .gate{position:fixed;inset:0;z-index:9;display:grid;place-items:center;background:radial-gradient(120vmax 120vmax at 50% -20%,#000b,transparent 60%),linear-gradient(135deg,#051018,#0b0b15 50%,#120b16)}
+  .card{padding:1.2rem 1.4rem;border:1px solid #ffffff26;border-radius:16px;background:linear-gradient(180deg,#0d1030dd,#080a18dd);box-shadow:0 30px 90px #000a,inset 0 0 60px #fff2;max-width:min(92vw,800px);text-align:center}
+  .start{font-size:1.05rem;padding:.8rem 1.1rem;border-radius:12px}
+
+  @media (prefers-reduced-motion: reduce){
+    header.jit{animation:none}
+    .shake{animation:none}
+  }
+</style>
+</head>
+<body>
+  <canvas id="stage" aria-hidden="true"></canvas>
+  <video id="webcam" class="cam" autoplay muted playsinline></video>
+  <canvas id="paint" aria-hidden="true"></canvas>
+  <div class="sky" id="sky" aria-hidden="true"></div>
+
+  <header id="h">
+    <div class="mega" id="title" data-text="CHAOS://OVERDRIVE"><span>CHAOS://OVERDRIVE</span></div>
+  </header>
+
+  <div class="panel" role="group" aria-label="Chaos Console">
+    <h2>Chaos Console <span class="badge" id="fps">…fps</span> <span class="badge" id="drops">drops:0</span></h2>
+
+    <label>Kaleido <input type="range" id="k" min="1" max="12" step="1" value="6"></label>
+    <label>Feedback <input type="range" id="fb" min="0" max="0.99" step="0.01" value="0.86"></label>
+
+    <button id="spawn">Spawn Window</button>
+    <button id="rain">Emoji Rain</button>
+
+    <button id="glitch">Title Jitter</button>
+    <button id="shake">Shake</button>
+
+    <button id="mic">Mic Reactive</button>
+    <button id="music">Insane Synth</button>
+
+    <button id="cam">Webcam Glitch</button>
+    <button id="danger">DANGER MODE</button>
+  </div>
+
+  <div class="gate" id="gate" role="dialog" aria-modal="true">
+    <div class="card">
+      <h1>Welcome to <b>CHAOS://OVERDRIVE</b></h1>
+      <p>Shader feedback loops, kaleidoscopes, self-moving popups, emoji-torrents, webcam glitches, speech that yells at you, and a <i>danger mode</i> that should probably be illegal.</p>
+      <button class="start" id="start">Tap to Start</button>
+      <p style="opacity:.7;margin-top:.6rem;">Offline. No libraries. May spook pets.</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const rand=(a,b)=>Math.random()*(b-a)+a;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+
+  const canvas=document.getElementById('stage');
+  const gl=canvas.getContext('webgl',{antialias:false,depth:false,preserveDrawingBuffer:false});
+  if(!gl) alert('WebGL not supported.');
+
+  const vsSrc=\`
+  attribute vec2 a;
+  varying vec2 v;
+  void main(){v=(a+1.)*.5;gl_Position=vec4(a,0.,1.);} \`;
+
+  const fsSrc=\`
+  precision highp float;
+  uniform vec2 r;
+  uniform float t;
+  uniform float fb;
+  uniform float kseg;
+  uniform float lvl;
+  uniform vec2 m;
+  uniform sampler2D prev;
+  varying vec2 v;
+
+  float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
+  float noise(in vec2 p){
+    vec2 i=floor(p); vec2 f=fract(p);
+    float a=hash(i);
+    float b=hash(i+vec2(1.,0.));
+    float c=hash(i+vec2(0.,1.));
+    float d=hash(i+vec2(1.,1.));
+    vec2 u=f*f*(3.-2.*f);
+    return mix(a,b,u.x)+(c-a)*u.y*(1.-u.x)+(d-b)*u.x*u.y;
+  }
+  float fbm(vec2 p){
+    float v=0.; float a=.5;
+    for(int i=0;i<5;i++){v+=a*noise(p);p*=2.02;a*=.5;}
+    return v;
+  }
+
+  vec2 kaleido(vec2 uv,float seg){
+    vec2 c=uv-0.5;
+    float ang=atan(c.y,c.x)+3.14159;
+    float rad=length(c);
+    float s=3.14159*2.0/seg;
+    ang=mod(ang,s);
+    ang=abs(ang - s*0.5);
+    vec2 outv=vec2(cos(ang),sin(ang))*rad;
+    return outv+0.5;
+  }
+
+  void main(){
+    vec2 uv=v;
+    vec2 muv=m;
+    float time=t;
+
+    uv = kaleido(uv, max(1.0,kseg));
+
+    vec2 st=(uv-0.5);
+    float ang = time*0.2 + lvl*3.14;
+    float ca=cos(ang), sa=sin(ang);
+    mat2 R=mat2(ca,-sa,sa,ca);
+    st = R*st*(1.0-0.02*lvl) + (muv-0.5)*0.2*lvl;
+    vec2 p = st + 0.5;
+
+    float shift = 0.004 + 0.01*lvl;
+    vec4 pr = texture2D(prev, p + vec2(shift,0.0));
+    vec4 pg = texture2D(prev, p + vec2(-shift,0.0));
+    vec4 pb = texture2D(prev, p + vec2(0.0,shift));
+    vec3 prevCol = vec3(pr.r, pg.g, pb.b);
+
+    float bands = sin(10.0*st.x + time*1.4) + cos(11.0*st.y - time*1.7);
+    bands += sin(7.0*(st.x+st.y)+time*(2.0+lvl*6.0));
+    float f = fbm(st*3.0 + time*0.18);
+    float ring = smoothstep(0.3,0.0, length(st-(muv-0.5)));
+
+    vec3 base = mix(vec3(0.,1.,1.), vec3(1.,0.,1.), smoothstep(-2.0,2.0,bands));
+    base = mix(base, vec3(1.,1.,0.), smoothstep(0.,1.2,f + ring*0.8));
+
+    vec3 col = mix(base, prevCol, fb);
+    col += vec3(1.0,1.0,1.0) * pow(lvl,2.0)*0.8;
+
+    float d = distance(uv,vec2(0.5));
+    col *= 1.0 - smoothstep(0.6,1.0,d);
+
+    gl_FragColor = vec4(col,1.0);
+  }\`;
+
+  function shader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;}
+  const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,vsSrc));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,fsSrc));gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+
+  const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,-1,1,1,-1,1]),gl.STATIC_DRAW);
+  const loc=gl.getAttribLocation(prog,'a');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  const uRes=gl.getUniformLocation(prog,'r'),uTime=gl.getUniformLocation(prog,'t'),uFb=gl.getUniformLocation(prog,'fb'),uK=gl.getUniformLocation(prog,'kseg'),uLvl=gl.getUniformLocation(prog,'lvl'),uM=gl.getUniformLocation(prog,'m');
+
+  let texA=gl.createTexture(),texB=gl.createTexture(),fbA=gl.createFramebuffer(),fbB=gl.createFramebuffer();
+  function setupTex(tex){
+    gl.bindTexture(gl.TEXTURE_2D,tex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  }
+  setupTex(texA);setupTex(texB);
+
+  function resize(){
+    const dpr=Math.min(devicePixelRatio||1,2);
+    const w=Math.floor(innerWidth*dpr),h=Math.floor(innerHeight*dpr);
+    canvas.width=w;canvas.height=h;canvas.style.width='100vw';canvas.style.height='100vh';
+    gl.viewport(0,0,w,h);gl.uniform2f(uRes,w,h);
+    gl.bindTexture(gl.TEXTURE_2D,texA);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fbA);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texA,0);
+    gl.bindTexture(gl.TEXTURE_2D,texB);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,fbB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texB,0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  }
+  addEventListener('resize',resize);resize();
+
+  const fpsEl=document.getElementById('fps');
+  const dropsEl=document.getElementById('drops');
+  const kEl=document.getElementById('k'), fbEl=document.getElementById('fb');
+  let kseg=+kEl.value, fbAmt=+fbEl.value;
+  kEl.oninput=e=>kseg=+e.target.value;
+  fbEl.oninput=e=>fbAmt=+e.target.value;
+
+  const header=document.getElementById('h');
+  document.getElementById('glitch').onclick=()=>header.classList.toggle('jit');
+
+  const sky=document.getElementById('sky');
+  const EMOJIS=[...'🔥💥✨⚡️🌀🎉🎈🪩🌈💫🦄👾🤖🎮🧨🍭💎🧿🧬🛸🦜🦂🐙🧪🔮🥁🪅'];
+  function spawnRain(n=40, t=3500){
+    for(let i=0;i<n;i++){
+      const d=document.createElement('div');
+      d.className='drop';
+      d.textContent=EMOJIS[Math.floor(Math.random()*EMOJIS.length)];
+      d.style.left=rand(-5,95)+'vw';
+      d.style.animationDuration=rand(1.8,5.0)+'s';
+      d.style.animationDelay=rand(0,.6)+'s';
+      d.style.transform=\`translateY(\${rand(-40,-10)}vh) rotate(\${rand(-90,90)}deg)\`;
+      sky.appendChild(d);
+      setTimeout(()=>d.remove(), t+1000);
+    }
+  }
+  document.getElementById('rain').onclick=()=>spawnRain(80,4000);
+
+  document.getElementById('spawn').onclick=()=>spawnWindow();
+  function spawnWindow(){
+    const el=document.createElement('div');
+    el.className='float';
+    el.style.left=rand(8,70)+'vw';
+    el.style.top=rand(8,70)+'vh';
+    el.innerHTML=\`<div class="bar"><span>Glitch Sprite</span><span class="x"></span></div>
+      <div class="content">
+        <p><span class="linky" style="--r:\${(Math.random()*12-6).toFixed(1)}">wow</span> <span class="linky" style="--r:\${(Math.random()*12-6).toFixed(1)}">chaos</span> <span class="linky" style="--r:\${(Math.random()*12-6).toFixed(1)}">overdrive!!</span></p>
+        <p>Drag me. I may also wander off on my own. Double-click me to multiply.</p>
+      </div>\`;
+    document.body.appendChild(el);
+    makeDraggable(el);
+    wander(el);
+  }
+  function makeDraggable(el){
+    const bar=el.querySelector('.bar'); const x=el.querySelector('.x');
+    let dx=0, dy=0, drag=false;
+    const down=e=>{drag=true;const r=el.getBoundingClientRect();const p=e.touches?e.touches[0]:e;dx=p.clientX-r.left;dy=p.clientY-r.top;el.style.transition='none';bar.style.cursor='grabbing'};
+    const move=e=>{if(!drag)return;const p=e.touches?e.touches[0]:e;let x1=clamp(p.clientX-dx,6,innerWidth-el.offsetWidth-6), y1=clamp(p.clientY-dy,6,innerHeight-el.offsetHeight-6); el.style.left=x1+'px'; el.style.top=y1+'px';};
+    const up=()=>{drag=false;bar.style.cursor='grab';el.style.transition=''};
+    bar.addEventListener('mousedown',down);bar.addEventListener('touchstart',down,{passive:true});
+    addEventListener('mousemove',move);addEventListener('touchmove',move,{passive:false});
+    addEventListener('mouseup',up);addEventListener('touchend',up);
+    el.addEventListener('dblclick',()=>spawnWindow());
+    x.addEventListener('click',()=>el.remove());
+  }
+  function wander(el){
+    let vx=rand(-1,1), vy=rand(-1,1);
+    function step(){
+      const r=el.getBoundingClientRect();
+      let x=r.left+vx, y=r.top+vy;
+      if(x<6||x>innerWidth-r.width-6) vx*=-1;
+      if(y<60||y>innerHeight-r.height-6) vy*=-1;
+      el.style.left=(r.left+vx)+'px'; el.style.top=(r.top+vy)+'px';
+      if(Math.random()<0.004) { vx=rand(-3,3); vy=rand(-3,3); }
+      if(!document.body.contains(el)) return;
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  const paint=document.getElementById('paint');
+  const pctx=paint.getContext('2d');
+  function resizePaint(){paint.width=innerWidth;paint.height=innerHeight;}
+  addEventListener('resize',resizePaint);resizePaint();
+  let lastP=null;
+  addEventListener('pointermove',e=>{
+    if(!lastP) lastP=[e.clientX,e.clientY];
+    pctx.globalCompositeOperation='lighter';
+    pctx.fillStyle=\`hsla(\${(e.clientX+e.clientY)%360},100%,60%,0.18)\`;
+    const dx=e.clientX-lastP[0], dy=e.clientY-lastP[1]; const sp=Math.sqrt(dx*dx+dy*dy);
+    const r=clamp(sp*0.4,3,40);
+    pctx.beginPath();pctx.arc(e.clientX,e.clientY,r,0,Math.PI*2);pctx.fill();
+    lastP=[e.clientX,e.clientY];
+  });
+  addEventListener('pointerdown',()=>{spawnRain(24,2500); if(navigator.vibrate) navigator.vibrate([20,20,40]); shakeOnce();});
+
+  const AudioC=window.AudioContext||window.webkitAudioContext;
+  let actx=null, analyser=null, data=null;
+  let micOn=false, musicOn=false;
+  let dropCount=0, dropCooldown=0;
+  let oscA, oscB, masterGain;
+
+  function initAudio(){
+    actx = actx || new AudioC();
+    if(!analyser){
+      analyser=actx.createAnalyser();
+      analyser.fftSize=1024;
+      data=new Uint8Array(analyser.frequencyBinCount);
+      const d=actx.createOscillator(); const g=actx.createGain(); g.gain.value=.00001; d.connect(g).connect(analyser); d.start();
+    }
+  }
+  function level(){
+    if(!analyser)return 0;
+    analyser.getByteFrequencyData(data);
+    let sum=0; const N=Math.min(64,data.length);
+    for(let i=0;i<N;i++) sum+=data[i]*(i<8?1.8:1);
+    return sum/(N*255);
+  }
+
+  document.getElementById('mic').onclick=async()=>{
+    initAudio(); if(micOn) return;
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const src=actx.createMediaStreamSource(stream);
+      src.connect(analyser);
+      micOn=true; toast('Mic reactive ON');
+    }catch(e){ alert('Mic permission denied'); }
+  };
+
+  document.getElementById('music').onclick=()=>{
+    initAudio();
+    if(!musicOn){
+      masterGain=actx.createGain(); masterGain.gain.value=0.2; masterGain.connect(analyser); masterGain.connect(actx.destination);
+      oscA=actx.createOscillator(); oscB=actx.createOscillator();
+      const gainA=actx.createGain(), gainB=actx.createGain();
+      oscA.type='sawtooth'; oscB.type='square';
+      oscA.frequency.value=55; oscB.frequency.value=220;
+      gainA.gain.value=.08; gainB.gain.value=.04;
+      oscA.connect(gainA).connect(masterGain);
+      oscB.connect(gainB).connect(masterGain);
+      oscA.start(); oscB.start();
+      const scale=[0,3,5,7,10,12];
+      function arp(){
+        if(!musicOn)return;
+        const root=55*Math.pow(2,Math.floor(Math.random()*3));
+        const n=root*Math.pow(2, scale[Math.floor(Math.random()*scale.length)]/12);
+        oscB.frequency.setTargetAtTime(n,actx.currentTime,0.01);
+        setTimeout(arp, rand(90,220));
+      }
+      arp();
+      musicOn=true; toast('Insane Synth ON');
+    }else{
+      try{oscA.stop();oscB.stop();}catch{}
+      masterGain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+0.5);
+      setTimeout(()=>{try{masterGain.disconnect()}catch{}},600);
+      musicOn=false; toast('Insane Synth OFF');
+    }
+  };
+
+  function detectDrops(lvl){
+    dropCooldown = Math.max(0, dropCooldown-1);
+    if(lvl>0.42 && dropCooldown<=0){
+      dropCooldown=20;
+      dropCount++; dropsEl.textContent='drops:'+dropCount;
+      spawnRain(30,2000);
+      shakeOnce();
+      shout();
+      if(navigator.vibrate) navigator.vibrate([10,30,30,30]);
+    }
+  }
+
+  const camBtn=document.getElementById('cam');
+  const v=document.getElementById('webcam');
+  let camOn=false, camTicker=0;
+  camBtn.onclick=async()=>{
+    if(!camOn){
+      try{
+        const str=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+        v.srcObject=str; v.classList.add('on'); camOn=true; toast('Webcam glitch ON');
+      }catch(e){ alert('Webcam permission denied'); }
+    }else{
+      try{v.srcObject.getTracks().forEach(t=>t.stop())}catch{}
+      v.srcObject=null; v.classList.remove('on','g1','g2','g3'); camOn=false; toast('Webcam glitch OFF');
+    }
+  };
+  function glitchCam(){
+    if(!camOn) return;
+    camTicker++;
+    if(camTicker%20===0){
+      v.classList.remove('g1','g2','g3');
+      v.classList.add('g'+(1+Math.floor(Math.random()*3)));
+    }
+  }
+
+  let canSpeak = 'speechSynthesis' in window;
+  function shout(){
+    if(!canSpeak) return;
+    if(Math.random()<0.6){
+      const msg=new SpeechSynthesisUtterance(['CHAOS!','OVERDRIVE!','MORE!','YES!','GLITCH!'][Math.floor(Math.random()*5)]);
+      msg.rate=rand(0.9,1.4); msg.pitch=rand(0.4,1.6); msg.volume=0.8;
+      speechSynthesis.speak(msg);
+    }
+  }
+
+  const gate=document.getElementById('gate');
+  document.getElementById('start').onclick=async()=>{
+    try{ if(!actx){initAudio(); if(actx.state==='suspended') await actx.resume();} }catch(e){}
+    gate.remove();
+  };
+
+  document.getElementById('shake').onclick=shakeOnce;
+  function shakeOnce(){
+    document.body.classList.remove('shake'); void document.body.offsetWidth;
+    document.body.classList.add('shake');
+    setTimeout(()=>document.body.classList.remove('shake'),550);
+  }
+
+  document.getElementById('danger').onclick=()=>{
+    for(let i=0;i<8;i++) spawnWindow();
+    spawnRain(160,5000);
+    for(let i=0;i<16;i++) setTimeout(shakeOnce, i*80);
+    fbAmt=0.94; kseg=10;
+    document.getElementById('k').value=kseg;
+    document.getElementById('fb').value=fbAmt;
+    shout(); shout();
+  };
+
+  let fpsFrames=0,fpsLast=performance.now();
+  function fpsTick(){
+    const now=performance.now(); fpsFrames++;
+    if(now-fpsLast>=500){ const fps=Math.round((fpsFrames*1000)/(now-fpsLast)); fpsEl.textContent=fps+'fps'; fpsFrames=0; fpsLast=now; }
+  }
+
+  let mouse=[0.5,0.5];
+  addEventListener('pointermove',e=>{mouse=[e.clientX/innerWidth, 1-e.clientY/innerHeight]});
+
+  let toastId=0;
+  function toast(msg){
+    const el=document.createElement('div');
+    el.textContent=msg;
+    el.style.cssText=\`position:fixed;bottom:5.5rem;left:50%;transform:translateX(-50%);
+      background:#0a0f18cc;color:#e9f2ff;padding:.5rem .8rem;border-radius:10px;border:1px solid #ffffff26;
+      z-index:99;font-weight:800;letter-spacing:.03em;box-shadow:0 10px 30px #000a;backdrop-filter:blur(6px)\`;
+    document.body.appendChild(el);
+    setTimeout(()=>{el.style.transition='opacity .4s ease';el.style.opacity='0';},900);
+    setTimeout(()=>el.remove(),1400);
+  }
+
+  let time0=performance.now();
+  let texA=gl.createTexture(),texB=gl.createTexture(),fbA=gl.createFramebuffer(),fbB=gl.createFramebuffer(); // placeholders for linter
+  // NOTE: real ones already declared earlier; this prevents accidental minifier/optimizer issues.
+
+  // rebind actual (no-op)
+
+  let srcTex=gl.getParameter(gl.TEXTURE_BINDING_2D); // dummy, replaced below
+  srcTex=null; // just to ensure it's defined
+
+  // We'll use the earlier texA/texB from scope; ping-pong vars:
+  let srcT=texA, dstT=texB, srcF=fbA, dstF=fbB;
+
+  function draw(){
+    requestAnimationFrame(draw);
+    fpsTick();
+    glitchCam();
+    const lvl=level();
+    detectDrops(lvl);
+    const time=(performance.now()-time0)/1000;
+
+    gl.uniform1f(uTime,time);
+    gl.uniform1f(uFb,fbAmt);
+    gl.uniform1f(uK,kseg);
+    gl.uniform1f(uLvl,lvl);
+    gl.uniform2f(uM,mouse[0],mouse[1]);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER,dstF);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,srcT);
+    const uPrev=gl.getUniformLocation(prog,'prev'); gl.uniform1i(uPrev,0);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.bindTexture(gl.TEXTURE_2D,dstT);
+    gl.drawArrays(gl.TRIANGLES,0,6);
+
+    let tmp=srcT; srcT=dstT; dstT=tmp;
+    tmp=srcF; srcF=dstF; dstF=tmp;
+  }
+  requestAnimationFrame(draw);
+
+})();</script>
+</body>
+</html>
